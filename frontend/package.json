@@ -18,7 +18,7 @@
     "recharts": "^3.8.1",
     "react-hot-toast": "^2.4.0",
     "react-error-boundary": "^4.0.0",
-    "framer-motion": "^10.0.0",
+    "framer-motion": "^11.0.0",
     "date-fns": "^2.30.0",
     "lodash": "^4.17.21",
     "clsx": "^2.0.0"
