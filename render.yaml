@@ -4,7 +4,7 @@ services:
 
 # Backend API Service
 
-* type: web
+- type: web
   name: sentinel-trading-api
   env: python
   plan: free
@@ -14,20 +14,20 @@ services:
   healthCheckPath: /api/health
   envVars:
 
-  * key: SUPABASE_URL
+  - key: SUPABASE_URL
     value: https://dqfuuycnzhqatkiwcecf.supabase.co
-  * key: SUPABASE_ANON_KEY
-    value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZnV1eWNuemhxYXRraXdjZWNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4NjQ5MzMsImV4cCI6MjA5MDQ0MDkzM30.qYwxaPPy2O7L0QEVSJL4TZVlS62yjbfWlXAnmg5S3bE
-  * key: SECRET_KEY
+  - key: SUPABASE_ANON_KEY
+    value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+  - key: SECRET_KEY
     generateValue: true
-  * key: FLASK_ENV
+  - key: FLASK_ENV
     value: production
-  * key: SQL_DEBUG
+  - key: SQL_DEBUG
     value: false
 
 # Frontend Service (Static Site)
 
-* type: web
+- type: web
   name: sentinel-trading-frontend
   runtime: static
   plan: free
@@ -36,9 +36,9 @@ services:
   staticPublishPath: dist
   routes:
 
-  * type: rewrite
-    source: /*
+  - type: rewrite
+    source: /-
     destination: /index.html
     envVars:
-  * key: VITE_API_URL
+  - key: VITE_API_URL
     value: https://sentinel-trading-api.onrender.com/api
