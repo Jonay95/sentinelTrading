@@ -29,7 +29,7 @@ services:
     plan: free
     rootDir: frontend
     buildCommand: npm run build
-    publishDir: dist
+    publishDirectory: dist
     healthCheckPath: /
     envVars:
       - key: VITE_API_URL
