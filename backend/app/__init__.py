@@ -34,9 +34,7 @@ def create_app(config_class=Config):
     def health():
         return {"status": "ok"}
 
-    with app.app_context():
-        if not inspect(db.engine).has_table("assets"):
-            db.create_all()
-        seed_assets_if_empty()
+    # Don't initialize database at startup to avoid connection issues
+    # Database will be initialized on-demand when needed
 
     return app
