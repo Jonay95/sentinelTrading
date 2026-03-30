@@ -5,7 +5,7 @@ services:
   - type: web
     name: sentinel-trading-api
     env: python
-    repo: https://github.com/your-username/sentinelTrading  # Replace with your repo
+    repo: https://github.com/Jonay95/sentinelTrading
     rootDir: backend
     buildCommand: pip install -r requirements_clean.txt
     startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
@@ -26,10 +26,10 @@ services:
   - type: web
     name: sentinel-trading-frontend
     env: static
-    repo: https://github.com/your-username/sentinelTrading  # Replace with your repo
+    repo: https://github.com/Jonay95/sentinelTrading
     rootDir: frontend
     buildCommand: npm run build
-    publishPath: dist
+    publishDirectory: dist
     healthCheckPath: /
     envVars:
       - key: VITE_API_URL
