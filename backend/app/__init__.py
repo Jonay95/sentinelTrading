@@ -1,4 +1,4 @@
-0"""
+"""
 Aplicación Flask: fábrica `create_app`, CORS, registro de blueprints y arranque de BD/seed.
 
 La lógica de negocio no vive aquí; véase `application/`, `domain/` e `infrastructure/`.
