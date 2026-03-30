@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel-config
+  namespace: sentinel-trading
+data:
+  DATABASE_HOST: "postgres-service"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "sentinel_trading"
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-service:9092"
+  MLFLOW_TRACKING_URI: "http://mlflow-service:5000"
+  SENTRY_DSN: "http://sentry-service:9000"
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "production"
+  
+  # Service URLs
+  API_GATEWAY_URL: "http://api-gateway-service:8000"
+  PREDICTION_SERVICE_URL: "http://prediction-service:8001"
+  TRADING_SERVICE_URL: "http://trading-service:8002"
+  RISK_SERVICE_URL: "http://risk-service:8003"
+  DATA_SERVICE_URL: "http://data-service:8004"
+  
+  # Rate Limiting
+  RATE_LIMIT_REQUESTS: "1000"
+  RATE_LIMIT_WINDOW: "60"
+  
+  # Circuit Breaker
+  CIRCUIT_BREAKER_THRESHOLD: "5"
+  CIRCUIT_BREAKER_TIMEOUT: "60"
+  
+  # Cache TTL
+  CACHE_TTL_DEFAULT: "300"
+  CACHE_TTL_SHORT: "60"
+  CACHE_TTL_LONG: "3600"
+  
+  # Retry Configuration
+  RETRY_COUNT: "3"
+  RETRY_DELAY: "1"
+  
+  # Health Check Intervals
+  HEALTH_CHECK_INTERVAL: "30"
+  HEALTH_CHECK_TIMEOUT: "10"
+  
+  # Monitoring
+  METRICS_ENABLED: "true"
+  TRACING_ENABLED: "true"
+  
+  # Security
+  JWT_SECRET_KEY: "your-production-secret-key"
+  CORS_ORIGINS: "https://sentinel-trading.com"
+  
+  # Performance
+  WORKER_PROCESSES: "4"
+  MAX_CONNECTIONS: "100"
+  CONNECTION_TIMEOUT: "30"
+  
+  # Data Processing
+  BATCH_SIZE: "1000"
+  MAX_BATCH_SIZE: "10000"
+  PROCESSING_TIMEOUT: "300"

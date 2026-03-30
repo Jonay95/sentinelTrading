@@ -1,0 +1,382 @@
+version: '3.8'
+
+services:
+  # Database
+  postgres:
+    image: postgres:15
+    container_name: sentinel_postgres
+    environment:
+      POSTGRES_DB: sentinel_trading
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sentinel_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: sentinel_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - sentinel_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Kafka (Event Streaming)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: sentinel_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - sentinel_network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: sentinel_kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    networks:
+      - sentinel_network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MLflow (Model Versioning)
+  mlflow:
+    image: python:3.9-slim
+    container_name: sentinel_mlflow
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_BACKEND_STORE_URI: postgresql://postgres:postgres@postgres:5432/sentinel_trading
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
+    volumes:
+      - mlflow_data:/mlflow
+      - ./scripts/start_mlflow.sh:/start_mlflow.sh
+    networks:
+      - sentinel_network
+    depends_on:
+      - postgres
+    command: bash /start_mlflow.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus (Metrics)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sentinel_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - sentinel_network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana (Visualization)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sentinel_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - sentinel_network
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Sentry (Error Tracking)
+  sentry:
+    image: sentry:latest
+    container_name: sentinel_sentry
+    ports:
+      - "9000:9000"
+    environment:
+      SENTRY_SECRET_KEY: your-secret-key-here
+      SENTRY_POSTGRES_HOST: postgres
+      SENTRY_POSTGRES_PORT: 5432
+      SENTRY_POSTGRES_DB: sentry
+      SENTRY_POSTGRES_USER: postgres
+      SENTRY_POSTGRES_PASSWORD: postgres
+      SENTRY_REDIS_HOST: redis
+      SENTRY_REDIS_PORT: 6379
+    volumes:
+      - sentry_data:/data
+    networks:
+      - sentinel_network
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/_health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # API Gateway
+  api_gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.gateway
+    container_name: sentinel_api_gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/sentinel_trading
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - SENTRY_DSN=http://sentry:9000
+    volumes:
+      - ./backend:/app
+    networks:
+      - sentinel_network
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+      - mlflow
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prediction Service
+  prediction_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prediction
+    container_name: sentinel_prediction_service
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/sentinel_trading
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - SENTRY_DSN=http://sentry:9000
+    volumes:
+      - ./backend:/app
+    networks:
+      - sentinel_network
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+      - mlflow
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Trading Service
+  trading_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.trading
+    container_name: sentinel_trading_service
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/sentinel_trading
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SENTRY_DSN=http://sentry:9000
+    volumes:
+      - ./backend:/app
+    networks:
+      - sentinel_network
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Risk Service
+  risk_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.risk
+    container_name: sentinel_risk_service
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/sentinel_trading
+      - REDIS_URL=redis://redis:6379/0
+      - SENTRY_DSN=http://sentry:9000
+    volumes:
+      - ./backend:/app
+    networks:
+      - sentinel_network
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Data Service
+  data_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.data
+    container_name: sentinel_data_service
+    ports:
+      - "8004:8004"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/sentinel_trading
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SENTRY_DSN=http://sentry:9000
+    volumes:
+      - ./backend:/app
+    networks:
+      - sentinel_network
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Celery Worker (Background Tasks)
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery
+    container_name: sentinel_celery_worker
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/sentinel_trading
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SENTRY_DSN=http://sentry:9000
+    volumes:
+      - ./backend:/app
+    networks:
+      - sentinel_network
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    command: celery -A app.infrastructure.celery_app worker --loglevel=info
+
+  # Celery Beat (Scheduler)
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery
+    container_name: sentinel_celery_beat
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/sentinel_trading
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SENTRY_DSN=http://sentry:9000
+    volumes:
+      - ./backend:/app
+    networks:
+      - sentinel_network
+    depends_on:
+      - postgres
+      - redis
+    command: celery -A app.infrastructure.celery_app beat --loglevel=info
+
+  # Nginx (Load Balancer)
+  nginx:
+    image: nginx:alpine
+    container_name: sentinel_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    networks:
+      - sentinel_network
+    depends_on:
+      - api_gateway
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+  mlflow_data:
+  prometheus_data:
+  grafana_data:
+  sentry_data:
+
+networks:
+  sentinel_network:
+    driver: bridge

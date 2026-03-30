@@ -1,0 +1,44 @@
+# Render Configuration for Sentinel Trading
+
+services:
+  # Backend API Service
+  - type: web
+    name: sentinel-trading-api
+    env: python
+    repo: https://github.com/your-username/sentinelTrading  # Replace with your repo
+    rootDir: backend
+    buildCommand: pip install -r requirements_clean.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    healthCheckPath: /api/health
+    envVars:
+      - key: SUPABASE_URL
+        value: https://dqfuuycnzhqatkiwcecf.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZnV1eWNuemhxYXRraXdjZWNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4NjQ5MzMsImV4cCI6MjA5MDQ0MDkzM30.qYwxaPPy2O7L0QEVSJL4TZVlS62yjbfWlXAnmg5S3bE
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FLASK_ENV
+        value: production
+      - key: SQL_DEBUG
+        value: false
+
+  # Frontend Service
+  - type: web
+    name: sentinel-trading-frontend
+    env: static
+    repo: https://github.com/your-username/sentinelTrading  # Replace with your repo
+    rootDir: frontend
+    buildCommand: npm run build
+    publishPath: dist
+    healthCheckPath: /
+    envVars:
+      - key: VITE_API_URL
+        value: https://sentinel-trading-api.onrender.com/api
+        sync: false
+
+databases:
+  # We're using Supabase instead of Render database
+  # This section is for reference only
+  - name: sentinel-trading-db
+    databaseName: sentinel_trading
+    user: sentinel_user

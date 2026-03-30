@@ -1,0 +1,1 @@
+Flask-Migrate / Alembic: ejecutar desde `backend/` con `FLASK_APP=wsgi.py flask db migrate -m "msg"` tras cambiar modelos.
