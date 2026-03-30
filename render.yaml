@@ -7,7 +7,6 @@ services:
 - type: web
   name: sentinel-trading-api
   env: python
-  plan: free
   rootDir: backend
   buildCommand: pip install -r requirements_clean.txt
   startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
@@ -30,7 +29,6 @@ services:
 - type: web
   name: sentinel-trading-frontend
   runtime: static
-  plan: free
   rootDir: frontend
   buildCommand: npm install && npm run build
   staticPublishPath: dist
