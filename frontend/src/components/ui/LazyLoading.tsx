@@ -1,3 +1,4 @@
+import { type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { Skeleton, DashboardSkeleton } from './Skeleton'
 
