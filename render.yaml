@@ -10,8 +10,8 @@
 #
 # Logs: Dashboard → cada servicio → pestaña "Logs" (worker, beat y API por separado).
 #
-# Playwright (cita previa): el build instala Chromium; si fallan dependencias del SO,
-# valorar imagen Docker con deps del sistema o worker dedicado.
+# Playwright: PLAYWRIGHT_BROWSERS_PATH=0 instala Chromium dentro del site-packages
+# (incluido en el slug). Sin esto, los binarios quedan en ~/.cache y en runtime no existen.
 
 services:
 
@@ -59,9 +59,11 @@ services:
     runtime: python
     plan: starter
     rootDir: backend
-    buildCommand: pip install -r requirements.txt && playwright install chromium
+    buildCommand: export PLAYWRIGHT_BROWSERS_PATH=0 && pip install -r requirements.txt && playwright install chromium chromium-headless-shell
     startCommand: celery -A app.infrastructure.celery_app worker --loglevel=info --concurrency=2
     envVars:
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
       - key: CELERY_BROKER_URL
         fromService:
           name: sentinel-celery-redis

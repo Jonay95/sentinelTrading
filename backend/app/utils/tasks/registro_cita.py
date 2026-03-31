@@ -431,6 +431,10 @@ def registro_cita(self):
 
         headless = os.getenv("REGISTRO_CITA_HEADLESS", "true").lower() in ("1", "true", "yes")
 
+        # Render (y similares): sin esto Playwright sigue buscando en ~/.cache, fuera del slug.
+        if os.getenv("RENDER", "").strip().lower() in ("true", "1", "yes"):
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+
         try:
             from playwright.sync_api import sync_playwright
         except ImportError:
@@ -586,7 +590,13 @@ def registro_cita(self):
                     "En Ubuntu/Debian (usuario con sudo): sudo apt install -y libgbm1 "
                     "o, desde el venv con permisos adecuados: playwright install-deps chromium"
                 )
-            return
+            if "executable doesn't exist" in err or "playwright install" in err:
+                logger.error(
+                    "Playwright: faltan binarios del navegador. En build: "
+                    "PLAYWRIGHT_BROWSERS_PATH=0 pip install -r requirements.txt && playwright install chromium; "
+                    "en runtime: env PLAYWRIGHT_BROWSERS_PATH=0 (Render/workers)."
+                )
+            raise
 
         if sin_citas:
             state["already_notified"] = False
