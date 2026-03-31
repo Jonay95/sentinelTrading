@@ -118,6 +118,57 @@ def _goto_wait_until() -> str:
     return "domcontentloaded"
 
 
+def _goto_timeout_ms(default_page_timeout: int) -> int:
+    raw = (os.getenv("REGISTRO_CITA_GOTO_TIMEOUT_MS") or "").strip()
+    if raw:
+        try:
+            ms = int(raw)
+        except ValueError:
+            ms = default_page_timeout
+    else:
+        ms = default_page_timeout
+    return max(10_000, min(ms, 300_000))
+
+
+def _log_goto_timeout_diagnosis(page_url: str) -> None:
+    logger.error(
+        "registro_cita: Page.goto agotó el tiempo. Causas frecuentes: (1) la web bloquea o "
+        "prioriza mal el tráfico desde datacenters (IPs de Render/AWS); (2) TLS o red lenta; "
+        "(3) domcontentloaded no llega por scripts/recursos colgados. Prueba en .env del worker: "
+        "REGISTRO_CITA_GOTO_WAIT_UNTIL=commit, sube REGISTRO_CITA_GOTO_TIMEOUT_MS (p. ej. 180000), "
+        "o ejecuta el worker desde una red residencial / VPN España / proxy saliente. URL=%s",
+        page_url,
+    )
+
+
+def _page_goto_resilient(page, url: str, wait_until: str, goto_timeout: int) -> None:
+    try:
+        page.goto(url, wait_until=wait_until, timeout=goto_timeout)
+        return
+    except Exception as e:
+        ename = type(e).__name__
+        emsg = str(e).lower()
+        if "timeout" not in ename.lower() and "timeout" not in emsg:
+            raise
+        if wait_until != "commit":
+            logger.warning(
+                "registro_cita: timeout en goto (wait_until=%s); reintento con commit.",
+                wait_until,
+            )
+            try:
+                page.goto(
+                    url,
+                    wait_until="commit",
+                    timeout=min(120_000, goto_timeout),
+                )
+                return
+            except Exception:
+                _log_goto_timeout_diagnosis(url)
+                raise
+        _log_goto_timeout_diagnosis(url)
+        raise
+
+
 def _resolve_form_root(page, nie_selector: str, timeout_ms: int) -> RootLike:
     """
     Muchos trámites @pre cargan el formulario dentro de un iframe.
@@ -485,8 +536,8 @@ def registro_cita(self):
                 page = context.new_page()
                 timeout_ms = int(os.getenv("REGISTRO_CITA_TIMEOUT_MS", "90000"))
                 page.set_default_timeout(timeout_ms)
-
-                page.goto(url, wait_until=_goto_wait_until())
+                goto_timeout = _goto_timeout_ms(timeout_ms)
+                _page_goto_resilient(page, url, _goto_wait_until(), goto_timeout)
 
                 extra_wait = int(os.getenv("REGISTRO_CITA_POST_GOTO_MS", "0") or "0")
                 if extra_wait > 0:
