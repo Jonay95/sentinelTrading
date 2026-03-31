@@ -1,44 +1,114 @@
-# Render Configuration for Sentinel Trading
+# Render — Sentinel Trading
+#
+# Orden: Redis (Key Value) primero; el API y los workers referencian connectionString.
+#
+# Workers Celery: en el dashboard, replica en worker Y beat las variables del API
+# (SECRET_KEY, DATABASE_URL, MAIL_*, REGISTRO_CITA_*, etc.).
+# Importante: Celery Beat arma el horario al ARRANCAR leyendo el .env del proceso beat;
+# hace falta REGISTRO_CITA_URL (y opcionalmente REGISTRO_CITA_BEAT_*) en sentinel-celery-beat
+# para que exista la tarea periódica. El worker que ejecuta Playwright necesita las mismas REGISTRO_*.
+#
+# Logs: Dashboard → cada servicio → pestaña "Logs" (worker, beat y API por separado).
+#
+# Playwright (cita previa): el build instala Chromium; si fallan dependencias del SO,
+# valorar imagen Docker con deps del sistema o worker dedicado.
 
 services:
 
-# Backend API Service
+  # --- Redis (broker + resultados Celery) ---
+  - type: keyvalue
+    name: sentinel-celery-redis
+    plan: starter
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
 
-- type: web
-  name: sentinel-trading-api
-  env: python
-  plan: free
-  rootDir: backend
-  buildCommand: pip install -r requirements.txt
-  startCommand: gunicorn --bind 0.0.0.0:$PORT wsgi:app
-  healthCheckPath: /api/health
-  envVars:
+  # --- Backend API ---
+  - type: web
+    name: sentinel-trading-api
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT wsgi:app
+    healthCheckPath: /api/health
+    envVars:
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: sentinel-celery-redis
+          type: keyvalue
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: sentinel-celery-redis
+          type: keyvalue
+          property: connectionString
+      - key: SUPABASE_URL
+        value: https://dqfuuycnzhqatkiwcecf.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FLASK_ENV
+        value: production
+      - key: SQL_DEBUG
+        value: false
 
-  - key: SUPABASE_URL
-    value: https://dqfuuycnzhqatkiwcecf.supabase.co
-  - key: SUPABASE_ANON_KEY
-    value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-  - key: SECRET_KEY
-    generateValue: true
-  - key: FLASK_ENV
-    value: production
-  - key: SQL_DEBUG
-    value: false
+  # --- Celery worker (ejecuta tareas) ---
+  - type: worker
+    name: sentinel-celery-worker
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt && playwright install chromium
+    startCommand: celery -A app.infrastructure.celery_app worker --loglevel=info --concurrency=2
+    envVars:
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: sentinel-celery-redis
+          type: keyvalue
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: sentinel-celery-redis
+          type: keyvalue
+          property: connectionString
+      - key: FLASK_ENV
+        value: production
 
-# Frontend Service (Static Site)
+  # --- Celery Beat (programación periódica; no necesita Playwright) ---
+  - type: worker
+    name: sentinel-celery-beat
+    runtime: python
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.infrastructure.celery_app beat --loglevel=info
+    envVars:
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: sentinel-celery-redis
+          type: keyvalue
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: sentinel-celery-redis
+          type: keyvalue
+          property: connectionString
+      - key: FLASK_ENV
+        value: production
 
-- type: web
-  name: sentinel-trading-frontend
-  runtime: static
-  plan: free
-  rootDir: frontend
-  buildCommand: npm install && npm run build
-  staticPublishPath: dist
-  routes:
-
-  - type: rewrite
-    source: /-
-    destination: /index.html
-  envVars:
-  - key: VITE_API_URL
-    value: https://sentinel-trading-api.onrender.com/api
+  # --- Frontend (estático) ---
+  - type: web
+    name: sentinel-trading-frontend
+    runtime: static
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /-
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://sentinel-trading-api.onrender.com/api
