@@ -1,6 +1,5 @@
-import toast, { ToastOptions, ToastPosition } from 'react-hot-toast'
+import toast, { type ToastOptions, type ToastPosition } from 'react-hot-toast'
 import { motion } from 'framer-motion'
-import { clsx } from 'clsx'
 
 // Toast configuration
 const defaultOptions: ToastOptions = {
@@ -112,7 +111,7 @@ export function ErrorToast({ message, t }: { message: string; t: any }) {
   )
 }
 
-export function LoadingToast({ message, t }: { message: string; t: any }) {
+export function LoadingToast({ message }: { message: string; t: any }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -50, scale: 0.3 }}

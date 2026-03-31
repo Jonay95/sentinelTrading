@@ -62,12 +62,12 @@ export const queryKeys = {
 
 // Query invalidation helpers
 export const invalidateQueries = {
-  dashboard: () => queryClient.invalidateQueries({ queryKey: queryKeys.dashboard() }),
-  assets: () => queryClient.invalidateQueries({ queryKey: queryKeys.assets() }),
+  dashboard: () => queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
+  assets: () => queryClient.invalidateQueries({ queryKey: queryKeys.assets }),
   asset: (id: number) => queryClient.invalidateQueries({ queryKey: queryKeys.assetDetail(id) }),
-  news: () => queryClient.invalidateQueries({ queryKey: queryKeys.news() }),
-  metrics: () => queryClient.invalidateQueries({ queryKey: queryKeys.metrics() }),
-  jobs: () => queryClient.invalidateQueries({ queryKey: queryKeys.jobs() }),
+  news: () => queryClient.invalidateQueries({ queryKey: queryKeys.news }),
+  metrics: () => queryClient.invalidateQueries({ queryKey: queryKeys.metrics }),
+  jobs: () => queryClient.invalidateQueries({ queryKey: queryKeys.jobs }),
 }
 
 // Prefetching helper

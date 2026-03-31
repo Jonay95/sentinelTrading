@@ -17,7 +17,7 @@ export function useDebouncedMemo<T>(
 ): T {
   return useMemo(() => {
     const debouncedFactory = debounce(factory, delay)
-    return debouncedFactory()
+    return debouncedFactory() as T
   }, deps)
 }
 
@@ -29,7 +29,7 @@ export function useThrottledMemo<T>(
 ): T {
   return useMemo(() => {
     const throttledFactory = throttle(factory, delay)
-    return throttledFactory()
+    return throttledFactory() as T
   }, deps)
 }
 

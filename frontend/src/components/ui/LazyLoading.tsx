@@ -1,6 +1,5 @@
-import { type ReactNode } from 'react'
 import { motion } from 'framer-motion'
-import { Skeleton } from './Skeleton'
+import { Skeleton, DashboardSkeleton } from './Skeleton'
 
 interface LazyLoadingProps {
   children: ReactNode
