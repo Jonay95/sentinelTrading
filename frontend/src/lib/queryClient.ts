@@ -1,17 +1,23 @@
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryCache, MutationCache } from '@tanstack/react-query'
 
 // Create a query client with optimized caching strategies
 export const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error: any) => queryErrorHandler(error),
+  }),
+  mutationCache: new MutationCache({
+    onError: (error: any) => queryErrorHandler(error),
+  }),
   defaultOptions: {
     queries: {
       // Cache time: 5 minutes for most data
       staleTime: 5 * 60 * 1000,
       // Cache time: 10 minutes (data stays in cache after being stale)
-      cacheTime: 10 * 60 * 1000,
+      gcTime: 10 * 60 * 1000,
       // Retry failed requests 3 times with exponential backoff
       retry: 3,
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-      // Refetch on window focus (optional, can be disabled for performance)
+      // Refetch on window focus
       refetchOnWindowFocus: false,
       // Refetch on reconnect
       refetchOnReconnect: true,
@@ -179,15 +185,6 @@ export const configureQueryClient = () => {
         retry: 3, // More retry in prod for reliability
       },
     })
-  }
-  
-  // Set up global error handler
-  queryClient MutationCache = {
-    onError: queryErrorHandler,
-  }
-  
-  queryClient QueryCache = {
-    onError: queryErrorHandler,
   }
 }
 
