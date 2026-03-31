@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from celery import current_task
 
-from app.celery_app import celery_app, BaseTask
+from app.infrastructure.celery_app import celery_app, BaseTask
 from app.container import get_container
 from app.infrastructure.logging_config import LoggerMixin
 from app.infrastructure.cache import get_cache

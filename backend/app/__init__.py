@@ -12,7 +12,7 @@ from flask_cors import CORS
 from sqlalchemy import inspect
 
 from app.config import Config
-from app.extensions import db, migrate
+from app.extensions import db, migrate, mail
 from app.seed import seed_assets_if_empty
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ def create_app(config_class=Config):
 
     db.init_app(app)
     migrate.init_app(app, db)
+    mail.init_app(app)
     CORS(app, resources={r"/api/*": {"origins": config_class.CORS_ORIGINS}})
 
     from app.api import api_bp

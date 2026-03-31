@@ -42,3 +42,12 @@ class Config:
     # Noticias: ahorrar cuota en APIs gratuitas
     NEWS_MIN_INTERVAL_HOURS = int(os.environ.get("NEWS_MIN_INTERVAL_HOURS", "8"))
     NEWS_PAGE_SIZE = int(os.environ.get("NEWS_PAGE_SIZE", "12"))
+
+    # Correo (cita previa / avisos)
+    MAIL_SERVER = os.environ.get("MAIL_SERVER", "")
+    MAIL_PORT = int(os.environ.get("MAIL_PORT", "587"))
+    MAIL_USE_TLS = _bool_env("MAIL_USE_TLS", True)
+    MAIL_USE_SSL = _bool_env("MAIL_USE_SSL", False)
+    MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "")
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
+    MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", "")

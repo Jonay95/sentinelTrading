@@ -1,4 +1,4 @@
-const base = ''
+const base = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`${base}${path}`, {

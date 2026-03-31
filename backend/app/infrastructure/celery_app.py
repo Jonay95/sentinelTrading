@@ -82,12 +82,40 @@ class CeleryConfig:
     }
 
 
+def _build_full_beat_schedule() -> Dict[str, Any]:
+    """
+    Beat schedule base + tarea opcional registro_cita (intervalo desde .env).
+
+    REGISTRO_CITA_BEAT_ENABLED: true/false (defecto true). false desactiva el beat.
+    REGISTRO_CITA_BEAT_INTERVAL_MINUTES: entero 1–1440 (defecto 1).
+    Solo se programa en Beat si REGISTRO_CITA_URL no está vacía (evita ejecuciones vacías).
+    """
+    schedule = dict(CeleryConfig.BEAT_SCHEDULE)
+    enabled_raw = (os.environ.get("REGISTRO_CITA_BEAT_ENABLED") or "true").strip().lower()
+    if enabled_raw in ("0", "false", "no", "off"):
+        return schedule
+    if not (os.environ.get("REGISTRO_CITA_URL") or "").strip():
+        return schedule
+    try:
+        minutes = int(os.environ.get("REGISTRO_CITA_BEAT_INTERVAL_MINUTES", "1") or "1")
+    except ValueError:
+        minutes = 1
+    minutes = max(1, min(minutes, 1440))
+    schedule["registro-cita-periodic"] = {
+        "task": "app.utils.tasks.registro_cita.registro_cita",
+        "schedule": timedelta(minutes=minutes),
+    }
+    return schedule
+
+
 # Create Celery app
 celery_app = Celery('sentinel_trading')
 celery_app.config_from_object(CeleryConfig)
 
 # Auto-discover tasks
 celery_app.autodiscover_tasks(['app.infrastructure'])
+
+celery_app.conf.beat_schedule = _build_full_beat_schedule()
 
 
 class BaseTask(Task, LoggerMixin):
@@ -399,3 +427,8 @@ def check_celery_health() -> Dict:
             "error": str(e),
             "timestamp": datetime.utcnow().isoformat()
         }
+
+
+# Registrar tareas que no siguen el patrón autodiscover (celery_tasks / registro_cita)
+import app.infrastructure.celery_tasks  # noqa: E402, F401
+import app.utils.tasks.registro_cita  # noqa: E402, F401
