@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -11,6 +12,15 @@ from flask_mailman import EmailMessage
 
 from app.infrastructure.celery_app import BaseTask, celery_app
 
+# Importar playwright-stealth si está disponible
+try:
+    from playwright_stealth import stealth_sync
+    STEALTH_AVAILABLE = True
+except ImportError:
+    STEALTH_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.info("playwright-stealth no disponible. Instala con: pip install playwright-stealth")
+
 logger = logging.getLogger(__name__)
 
 # FrameLocator (iframe) o Frame (documento / iframe resuelto)
@@ -18,6 +28,60 @@ RootLike = Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 STATE_FILE = PROJECT_ROOT / "instance" / "registro_cita_state.json"
+
+
+def _human_delay(min_seconds: float = 2.0, max_seconds: float = 5.0) -> None:
+    """Añade un delay aleatorio para simular comportamiento humano."""
+    delay = random.uniform(min_seconds, max_seconds)
+    time.sleep(delay)
+
+
+def _simulate_mouse_movement(page) -> None:
+    """Simula movimientos aleatorios del mouse para parecer más humano."""
+    try:
+        # Movimientos aleatorios del mouse
+        for _ in range(random.randint(2, 5)):
+            x = random.randint(100, 1200)
+            y = random.randint(100, 800)
+            page.mouse.move(x, x, y)
+            time.sleep(random.uniform(0.1, 0.3))
+    except Exception:
+        pass
+
+
+def _apply_stealth(page) -> None:
+    """Aplica técnicas de stealth para evitar detección."""
+    try:
+        if STEALTH_AVAILABLE:
+            stealth_sync(page)
+            logger.info("playwright-stealth aplicado correctamente")
+        else:
+            logger.warning("playwright-stealth no disponible, usando técnicas manuales")
+            # Técnicas manuales de stealth
+            page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined,
+                });
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5],
+                });
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['es-ES', 'es', 'en'],
+                });
+            """)
+    except Exception as e:
+        logger.warning(f"Error aplicando stealth: {e}")
+
+
+def _get_realistic_user_agent() -> str:
+    """Devuelve un User Agent realista y actualizado."""
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/120.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
+    ]
+    return random.choice(user_agents)
 
 
 def _load_state() -> dict:
@@ -502,42 +566,88 @@ def registro_cita(self):
 
         try:
             with sync_playwright() as p:
-                launch_args: list[str] = []
-                if os.getenv("REGISTRO_CITA_NO_SANDBOX", "").lower() in ("1", "true", "yes"):
-                    launch_args.append("--no-sandbox")
-                    launch_args.append("--disable-setuid-sandbox")
-                if os.getenv("REGISTRO_CITA_STEALTH", "true").lower() in ("1", "true", "yes"):
-                    launch_args.append("--disable-blink-features=AutomationControlled")
-                # PaaS con poca RAM / /dev/shm pequeño (p. ej. Render 512MB)
+                # Configuración mejorada del browser
+                launch_args: list[str] = [
+                    "--no-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-web-security",
+                    "--disable-features=VizDisplayCompositor",
+                    "--disable-background-networking",
+                    "--disable-background-timer-throttling",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-renderer-backgrounding",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-client-side-phishing-detection",
+                    "--disable-component-extensions-with-background-pages",
+                    "--disable-default-apps",
+                    "--disable-extensions",
+                    "--disable-sync",
+                    "--disable-translate",
+                    "--metrics-recording-only",
+                    "--no-first-run",
+                    "--safebrowsing-disable-auto-update",
+                    "--enable-automation",
+                    "--password-store=basic",
+                    "--use-mock-keychain"
+                ]
+                
+                # Configuración específica para Render/entornos cloud
                 if os.getenv("RENDER", "").strip().lower() in ("true", "1", "yes"):
-                    launch_args.extend(
-                        [
-                            "--disable-dev-shm-usage",
-                            "--disable-gpu",
-                            "--disable-software-rasterizer",
-                        ]
-                    )
+                    launch_args.extend([
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--disable-software-rasterizer",
+                        "--disable-setuid-sandbox"
+                    ])
+                
+                # Headless configurable (importante para testing)
+                headless = os.getenv("REGISTRO_CITA_HEADLESS", "true").lower() in ("1", "true", "yes")
+                
                 browser = p.chromium.launch(headless=headless, args=launch_args)
-                ctx_kw: dict = {"locale": "es-ES"}
-                ua = (os.getenv("REGISTRO_CITA_USER_AGENT") or "").strip()
-                if ua:
-                    ctx_kw["user_agent"] = ua
-                if os.getenv("REGISTRO_CITA_IGNORE_HTTPS_ERRORS", "").lower() in (
-                    "1",
-                    "true",
-                    "yes",
-                ):
+                
+                # Contexto realista con configuración avanzada
+                ctx_kw = {
+                    "locale": "es-ES",
+                    "user_agent": _get_realistic_user_agent(),
+                    "viewport": {"width": 1366, "height": 768},
+                    "device_scale_factor": 1.0,
+                    "is_mobile": False,
+                    "has_touch": False,
+                    "java_script_enabled": True,
+                    "extra_http_headers": {
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                        "Accept-Language": "es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3",
+                        "Accept-Encoding": "gzip, deflate, br",
+                        "DNT": "1",
+                        "Connection": "keep-alive",
+                        "Upgrade-Insecure-Requests": "1"
+                    }
+                }
+                
+                # Ignorar errores HTTPS si está configurado
+                if os.getenv("REGISTRO_CITA_IGNORE_HTTPS_ERRORS", "").lower() in ("1", "true", "yes"):
                     ctx_kw["ignore_https_errors"] = True
-                    logger.warning(
-                        "registro_cita: ignore_https_errors activo (TLS no verificado). "
-                        "Corrige el almacén de certificados del servidor cuando puedas."
-                    )
+                    logger.warning("registro_cita: ignore_https_errors activo (TLS no verificado)")
+                
                 context = browser.new_context(**ctx_kw)
                 page = context.new_page()
+                
+                # Aplicar técnicas de stealth
+                _apply_stealth(page)
+                
+                # Simular comportamiento humano inicial
+                _human_delay(2, 4)
+                _simulate_mouse_movement(page)
+                
                 timeout_ms = int(os.getenv("REGISTRO_CITA_TIMEOUT_MS", "90000"))
                 page.set_default_timeout(timeout_ms)
                 goto_timeout = _goto_timeout_ms(timeout_ms)
+                
+                # Navegación con delays humanos
+                _human_delay(1, 3)
                 _page_goto_resilient(page, url, _goto_wait_until(), goto_timeout)
+                _human_delay(2, 4)
+                _simulate_mouse_movement(page)
 
                 extra_wait = int(os.getenv("REGISTRO_CITA_POST_GOTO_MS", "0") or "0")
                 if extra_wait > 0:
@@ -599,12 +709,45 @@ def registro_cita(self):
                     diag_sent_before_nie = True
 
                 root = _resolve_form_root(page, sel_nie, timeout_ms)
-                root.locator(sel_nie).first.fill(nie, force=ff)
-                root.locator(sel_nom).first.fill(nombre, force=ff)
-                root.locator(sel_pais).first.select_option(pais_value, force=ff)
+                
+                # Simular comportamiento humano al rellenar formulario
+                _human_delay(1, 3)
+                _simulate_mouse_movement(page)
+                
+                # Rellenar NIE con typing humano
+                nie_input = root.locator(sel_nie).first
+                nie_input.click()
+                _human_delay(0.5, 1.5)
+                nie_input.fill(nie, force=ff)
+                _human_delay(1, 2)
+                
+                # Rellenar nombre con typing humano
+                nom_input = root.locator(sel_nom).first
+                _simulate_mouse_movement(page)
+                nom_input.click()
+                _human_delay(0.5, 1.5)
+                nom_input.fill(nombre, force=ff)
+                _human_delay(1, 2)
+                
+                # Seleccionar país
+                pais_input = root.locator(sel_pais).first
+                _simulate_mouse_movement(page)
+                pais_input.click()
+                _human_delay(0.5, 1.5)
+                pais_input.select_option(pais_value, force=ff)
+                _human_delay(1, 2)
 
+                # Click en Aceptar con delay humano
+                _simulate_mouse_movement(page)
+                _human_delay(1, 3)
                 _get_by_role_click(root, page, "Aceptar", timeout_ms)
+                _human_delay(2, 4)
+                
+                # Click en Solicitar Cita con delay humano
+                _simulate_mouse_movement(page)
+                _human_delay(1, 3)
                 _get_by_role_click(root, page, "Solicitar Cita", timeout_ms)
+                _human_delay(2, 4)
 
                 hay_citas, sin_citas = _detect_result(page)
                 browser.close()

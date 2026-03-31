@@ -7,3 +7,4 @@ frontend/dist/
 .env
 *.pyc
 .DS_Store
+/backend/venv
