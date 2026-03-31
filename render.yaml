@@ -10,6 +10,9 @@
 #
 # Logs: Dashboard → cada servicio → pestaña "Logs" (worker, beat y API por separado).
 #
+# RAM: Playwright + Celery con concurrency>1 en Starter (512MB) suele OOM. Usa --concurrency=1
+# y/o plan Standard (2GB). En el worker define REGISTRO_CITA_NO_SANDBOX=true si Chromium falla al arrancar.
+#
 # Playwright: PLAYWRIGHT_BROWSERS_PATH=0 instala Chromium dentro del site-packages
 # (incluido en el slug). Sin esto, los binarios quedan en ~/.cache y en runtime no existen.
 
@@ -60,10 +63,12 @@ services:
     plan: starter
     rootDir: backend
     buildCommand: export PLAYWRIGHT_BROWSERS_PATH=0 && pip install -r requirements.txt && playwright install chromium chromium-headless-shell
-    startCommand: celery -A app.infrastructure.celery_app worker --loglevel=info --concurrency=2
+    startCommand: celery -A app.infrastructure.celery_app worker --loglevel=info --concurrency=1
     envVars:
       - key: PLAYWRIGHT_BROWSERS_PATH
         value: "0"
+      - key: REGISTRO_CITA_NO_SANDBOX
+        value: "true"
       - key: CELERY_BROKER_URL
         fromService:
           name: sentinel-celery-redis

@@ -454,8 +454,18 @@ def registro_cita(self):
                 launch_args: list[str] = []
                 if os.getenv("REGISTRO_CITA_NO_SANDBOX", "").lower() in ("1", "true", "yes"):
                     launch_args.append("--no-sandbox")
+                    launch_args.append("--disable-setuid-sandbox")
                 if os.getenv("REGISTRO_CITA_STEALTH", "true").lower() in ("1", "true", "yes"):
                     launch_args.append("--disable-blink-features=AutomationControlled")
+                # PaaS con poca RAM / /dev/shm pequeño (p. ej. Render 512MB)
+                if os.getenv("RENDER", "").strip().lower() in ("true", "1", "yes"):
+                    launch_args.extend(
+                        [
+                            "--disable-dev-shm-usage",
+                            "--disable-gpu",
+                            "--disable-software-rasterizer",
+                        ]
+                    )
                 browser = p.chromium.launch(headless=headless, args=launch_args)
                 ctx_kw: dict = {"locale": "es-ES"}
                 ua = (os.getenv("REGISTRO_CITA_USER_AGENT") or "").strip()
