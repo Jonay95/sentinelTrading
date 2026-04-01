@@ -266,9 +266,15 @@ def _prepare_locator_attached(locator, timeout_ms: int) -> None:
 
 
 def _goto_wait_until() -> str:
-    v = (os.getenv("REGISTRO_CITA_GOTO_WAIT_UNTIL") or "domcontentloaded").strip().lower()
-    if v in ("commit", "domcontentloaded", "load", "networkidle"):
-        return v
+    """
+    commit = respuesta HTTP recibida (útil en Render si la sede tarda o bloquea recursos).
+    domcontentloaded / load pueden agotar timeout aunque ya haya HTML.
+    """
+    raw = (os.getenv("REGISTRO_CITA_GOTO_WAIT_UNTIL") or "").strip().lower()
+    if raw in ("commit", "domcontentloaded", "load", "networkidle"):
+        return raw
+    if os.getenv("RENDER", "").lower() in ("true", "1"):
+        return "commit"
     return "domcontentloaded"
 
 
@@ -299,8 +305,8 @@ def _page_goto_resilient(page: Page, url: str, wait_until: str, timeout_ms: int)
     """
     Navegación resiliente con reintentos y timeout extendido para producción.
     """
-    logger.info(f"🌐 Navegando a: {url}")
-    
+    logger.info("🌐 Navegando a: %s (wait_until=%s)", url, wait_until)
+
     # Configurar reintentos para producción
     max_retries = 3 if os.getenv("RENDER", "").lower() in ("true", "1") else 2
     
@@ -983,17 +989,12 @@ def registro_cita(self) -> bool:
             # Simular comportamiento humano inicial
             _human_delay(2, 4)
             _simulate_mouse_movement(page)
-            
-            # Tomar screenshot inicial
-            take_screenshot(page, "inicio_navegacion")
-            
-            # Navegación con espera realista (CLAVE)
-            _human_delay(3, 6)  # Espera más larga para evitar detección
-            logger.info(f"🌐 Navegando a: {url}")
+
+            # Navegación (antes NO hagas screenshot: la página sigue en about:blank → PNG en blanco).
+            _human_delay(3, 6)
             _page_goto_resilient(page, url, _goto_wait_until(), goto_timeout)
             logger.info("✅ Navegación completada")
-            
-            # Tomar screenshot después de navegación
+
             take_screenshot(page, "pagina_cargada")
             
             # Simular comportamiento humano post-navegación
