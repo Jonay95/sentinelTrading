@@ -24,3 +24,4 @@ logs/
 # Archivos de test temporales
 test_*.py
 temp_*.py
+/.venv

@@ -53,6 +53,8 @@ services:
         generateValue: true
       - key: FLASK_ENV
         value: production
+      - key: CORS_ORIGINS
+        value: https://sentineltrading.onrender.com,http://localhost:5173
       - key: SQL_DEBUG
         value: false
 

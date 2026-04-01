@@ -18,7 +18,10 @@ class Config:
         "DATABASE_URL", "sqlite:///sentinel.db"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    _origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173")
+    _origins = os.environ.get(
+        "CORS_ORIGINS",
+        "http://localhost:5173,https://sentineltrading.onrender.com",
+    )
     CORS_ORIGINS = [o.strip() for o in _origins.split(",") if o.strip()]
     FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
     NEWS_API_KEY = os.environ.get("NEWS_API_KEY", "")
