@@ -640,124 +640,124 @@ def registro_cita(self):
 
         try:
             with sync_playwright() as p:
-                # 🟢 OPCIÓN 1 - Navegador REAL (la mejor)
-                # Usa tu Chrome real con sesión real → bypass brutal
-                use_real_browser = os.getenv("REGISTRO_CITA_USE_REAL_BROWSER", "true").lower() in ("1", "true", "yes")
+                # Detectar si estamos en producción (Render) o desarrollo
+                is_production = (
+                    os.getenv("RENDER", "").lower() in ("true", "1") or 
+                    os.getenv("ENVIRONMENT", "").lower() in ("production", "prod") or
+                    os.getenv("PYTHONUNBUFFERED", "") == "1"  # Indicador de Render
+                )
                 
-                if use_real_browser:
-                    logger.info("🟢 Usando navegador REAL con sesión de Chrome")
-                    
-                    # Usar perfil de Chrome SEPARADO para evitar conflictos
-                    chrome_user_data = os.getenv("REGISTRO_CITA_CHROME_PROFILE", 
-                                                "C:/Users/jonay/AppData/Local/Google/Chrome/User Data")
-                    
-                    # Crear perfil específico para el bot
-                    bot_profile_dir = os.path.join(chrome_user_data, "BotProfile")
-                    
-                    browser = p.chromium.launch_persistent_context(
-                        user_data_dir=bot_profile_dir,  # 👈 PERFIL SEPARADO
-                        headless=False,  # 👈 MUY IMPORTANTE - debe ser visible
-                        args=[
-                            "--no-sandbox",
-                            "--disable-blink-features=AutomationControlled",
-                            "--disable-web-security",
-                            "--disable-features=VizDisplayCompositor",
-                            "--disable-background-networking",
-                            "--disable-background-timer-throttling",
-                            "--disable-backgrounding-occluded-windows",
-                            "--disable-renderer-backgrounding",
-                            "--disable-client-side-phishing-detection",
-                            "--disable-component-extensions-with-background-pages",
-                            "--disable-default-apps",
-                            "--disable-extensions",
-                            "--disable-sync",
-                            "--disable-translate",
-                            "--metrics-recording-only",
-                            "--no-first-run",
-                            "--safebrowsing-disable-auto-update",
-                            "--password-store=basic",
-                            "--use-mock-keychain"
-                        ]
+                # Forzar headless en producción SIEMPRE
+                if is_production:
+                    headless = True
+                    logger.info("🏭 Producción detectada - Forzando modo headless")
+                else:
+                    headless = os.getenv("REGISTRO_CITA_HEADLESS", "false").lower() in ("true", "1")
+                    logger.info(f"👁️ Modo headless: {headless}")
+                
+                # Mostrar configuración
+                logger.info(f"🌍 Ambiente: {'Producción' if is_production else 'Desarrollo'}")
+                logger.info(f"🧙 Stealth: {STEALTH_AVAILABLE}")
+                
+                # Args comunes para Linux/Producción
+                launch_args = [
+                    "--no-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-web-security",
+                    "--disable-features=VizDisplayCompositor",
+                    "--disable-background-networking",
+                    "--disable-background-timer-throttling",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-renderer-backgrounding",
+                    "--disable-client-side-phishing-detection",
+                    "--disable-component-extensions-with-background-pages",
+                    "--disable-default-apps",
+                    "--disable-extensions",
+                    "--disable-sync",
+                    "--disable-translate",
+                    "--metrics-recording-only",
+                    "--no-first-run",
+                    "--safebrowsing-disable-auto-update",
+                    "--password-store=basic",
+                    "--use-mock-keychain",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-software-rasterizer",
+                    "--disable-setuid-sandbox",
+                    "--disable-features=AudioServiceOutOfProcess",  # Reducir errores
+                    "--disable-features=AudioContext",  # Reducir errores
+                    "--disable-features=WebRTC",  # Reducir errores
+                ]
+                
+                # EN PRODUCCIÓN: Siempre usar navegador normal sin perfil
+                if is_production:
+                    logger.info("🟡 Producción - Usando Playwright normal (sin perfil)")
+                    browser = p.chromium.launch(
+                        headless=True,  # Siempre headless en producción
+                        args=launch_args
                     )
                     
-                    # Usar el contexto del navegador persistente
-                    context = browser
-                    page = context.new_page()
-                    
-                else:
-                    # 🟡 OPCIÓN 2 - Playwright normal (fallback)
-                    logger.info("🟡 Usando Playwright normal (sin sesión real)")
-                    
-                    # Configuración mejorada del browser
-                    launch_args: list[str] = [
-                        "--no-sandbox",
-                        "--disable-blink-features=AutomationControlled",
-                        "--disable-web-security",
-                        "--disable-features=VizDisplayCompositor",
-                        "--disable-background-networking",
-                        "--disable-background-timer-throttling",
-                        "--disable-backgrounding-occluded-windows",
-                        "--disable-renderer-backgrounding",
-                        "--disable-client-side-phishing-detection",
-                        "--disable-component-extensions-with-background-pages",
-                        "--disable-default-apps",
-                        "--disable-extensions",
-                        "--disable-sync",
-                        "--disable-translate",
-                        "--metrics-recording-only",
-                        "--no-first-run",
-                        "--safebrowsing-disable-auto-update",
-                        "--enable-automation",
-                        "--password-store=basic",
-                        "--use-mock-keychain"
-                    ]
-                    
-                    # Configuración específica para Render/entornos cloud
-                    if os.getenv("RENDER", "").strip().lower() in ("true", "1", "yes"):
-                        launch_args.extend([
-                            "--disable-dev-shm-usage",
-                            "--disable-gpu",
-                            "--disable-software-rasterizer",
-                            "--disable-setuid-sandbox"
-                        ])
-                    
-                    # Headless configurable (importante para testing)
-                    headless = os.getenv("REGISTRO_CITA_HEADLESS", "false").lower() in ("1", "true", "yes")
-                    
-                    if not headless:
-                        logger.info("👁️  MODO VISIBLE ACTIVADO - Podrás ver el navegador")
-                    else:
-                        logger.warning("⚠️  MODO HEADLESS - No podrás ver qué pasa (no recomendado para testing)")
-                    
-                    browser = p.chromium.launch(headless=headless, args=launch_args)
-                    
-                    # Contexto realista con configuración avanzada
-                    ctx_kw = {
-                        "locale": "es-ES",
-                        "timezone_id": "Europe/Madrid",  
-                        "user_agent": _get_realistic_user_agent(),
-                        "viewport": {"width": 1366, "height": 768},
-                        "device_scale_factor": 1.0,
-                        "is_mobile": False,
-                        "has_touch": False,
-                        "java_script_enabled": True,
-                        "extra_http_headers": {
+                    # Crear contexto realista
+                    context = browser.new_context(
+                        locale="es-ES",
+                        timezone_id="Europe/Madrid",
+                        user_agent=_get_realistic_user_agent(),
+                        viewport={"width": 1366, "height": 768},
+                        device_scale_factor=1.0,
+                        is_mobile=False,
+                        has_touch=False,
+                        java_script_enabled=True,
+                        extra_http_headers={
                             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
                             "Accept-Language": "es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3",
                             "Accept-Encoding": "gzip, deflate, br",
                             "DNT": "1",
                             "Connection": "keep-alive",
                             "Upgrade-Insecure-Requests": "1"
-                        }
-                    }
-                    
-                    # Ignorar errores HTTPS si está configurado
-                    if os.getenv("REGISTRO_CITA_IGNORE_HTTPS_ERRORS", "").lower() in ("1", "true", "yes"):
-                        ctx_kw["ignore_https_errors"] = True
-                        logger.warning("registro_cita: ignore_https_errors activo (TLS no verificado)")
-                    
-                    context = browser.new_context(**ctx_kw)
+                        },
+                        ignore_https_errors=os.getenv("REGISTRO_CITA_IGNORE_HTTPS_ERRORS", "").lower() in ("1", "true", "yes")
+                    )
                     page = context.new_page()
+                    
+                else:
+                    # DESARROLLO: Usar navegador con perfil si está disponible
+                    if STEALTH_AVAILABLE:
+                        logger.info("🟢 Desarrollo - Usando navegador REAL con sesión de Chrome")
+                        bot_profile_dir = os.getenv("CHROME_PROFILE_DIR", os.path.expanduser("~/AppData/Local/Google/Chrome/User Data/BotProfile"))
+                        
+                        browser = p.chromium.launch_persistent_context(
+                            user_data_dir=bot_profile_dir,
+                            headless=headless,
+                            args=launch_args
+                        )
+                        page = browser.new_page()
+                    else:
+                        logger.info("🟡 Desarrollo - Usando Playwright normal (sin sesión real)")
+                        browser = p.chromium.launch(
+                            headless=headless,
+                            args=launch_args
+                        )
+                        
+                        context = browser.new_context(
+                            locale="es-ES",
+                            timezone_id="Europe/Madrid",
+                            user_agent=_get_realistic_user_agent(),
+                            viewport={"width": 1366, "height": 768},
+                            device_scale_factor=1.0,
+                            is_mobile=False,
+                            has_touch=False,
+                            java_script_enabled=True,
+                            extra_http_headers={
+                                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                                "Accept-Language": "es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3",
+                                "Accept-Encoding": "gzip, deflate, br",
+                                "DNT": "1",
+                                "Connection": "keep-alive",
+                                "Upgrade-Insecure-Requests": "1"
+                            },
+                            ignore_https_errors=os.getenv("REGISTRO_CITA_IGNORE_HTTPS_ERRORS", "").lower() in ("1", "true", "yes")
+                        )
+                        page = context.new_page()
                 
                 # Aplicar técnicas de stealth
                 _apply_stealth(page)
