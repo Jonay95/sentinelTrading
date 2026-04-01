@@ -982,70 +982,82 @@ def registro_cita(self) -> bool:
                             ready_sel,
                         )
 
-                sel_nie = (os.getenv("REGISTRO_CITA_SEL_NIE") or "#txtIdCitado").strip()
-                sel_nom = (os.getenv("REGISTRO_CITA_SEL_NOMBRE") or "#txtDesCitado").strip()
-                sel_pais = (os.getenv("REGISTRO_CITA_SEL_PAIS") or "#txtPaisNac").strip()
+            sel_nie = (os.getenv("REGISTRO_CITA_SEL_NIE") or "#txtIdCitado").strip()
+            sel_nom = (os.getenv("REGISTRO_CITA_SEL_NOMBRE") or "#txtDesCitado").strip()
+            sel_pais = (os.getenv("REGISTRO_CITA_SEL_PAIS") or "#txtPaisNac").strip()
 
-                if _diagnostic_email_enabled():
-                    body = _format_page_diagnostic(url, page)
-                    _send_diagnostic_mail(
-                        app,
-                        mail_to,
-                        "antes del formulario NIE",
-                        body,
-                    )
-                    diag_sent_before_nie = True
+            if _diagnostic_email_enabled():
+                body = _format_page_diagnostic(url, page)
+                _send_diagnostic_mail(
+                    app,
+                    mail_to,
+                    "antes del formulario NIE",
+                    body,
+                )
+                diag_sent_before_nie = True
 
-                logger.info("🔍 Buscando formulario de NIE...")
-                root = _resolve_form_root(page, sel_nie, timeout_ms)
-                logger.info("✅ Formulario encontrado")
-                
-                # Simular comportamiento humano al rellenar formulario
-                _human_delay(1, 3)
-                _simulate_mouse_movement(page)
-                
-                logger.info("📝 Rellenando formulario...")
-                # Rellenar NIE con typing humano
-                nie_input = root.locator(sel_nie).first
-                nie_input.click()
-                _human_delay(0.5, 1.5)
-                nie_input.fill(nie, force=ff)
-                logger.info(f"✅ NIE rellenado: {nie}")
-                _human_delay(1, 2)
-                
-                # Rellenar nombre con typing humano
-                nom_input = root.locator(sel_nom).first
-                _simulate_mouse_movement(page)
-                nom_input.click()
-                _human_delay(0.5, 1.5)
-                nom_input.fill(nombre, force=ff)
-                logger.info(f"✅ Nombre rellenado: {nombre}")
-                _human_delay(1, 2)
-                
-                # Seleccionar país
-                pais_input = root.locator(sel_pais).first
-                _simulate_mouse_movement(page)
-                pais_input.click()
-                _human_delay(0.5, 1.5)
-                pais_input.select_option(pais_value, force=ff)
-                logger.info(f"✅ País seleccionado: {pais_value}")
-                _human_delay(1, 2)
+            logger.info("🔍 Buscando formulario de NIE...")
+            root = _resolve_form_root(page, sel_nie, timeout_ms)
+            logger.info("✅ Formulario encontrado")
+            
+            # Tomar screenshot del formulario
+            take_screenshot(page, "formulario_encontrado")
+            
+            # Simular comportamiento humano al rellenar formulario
+            _human_delay(1, 3)
+            _simulate_mouse_movement(page)
+            
+            logger.info("📝 Rellenando formulario...")
+            # Rellenar NIE con typing humano
+            nie_input = root.locator(sel_nie).first
+            nie_input.click()
+            _human_delay(0.5, 1.5)
+            nie_input.fill(nie, force=ff)
+            logger.info(f"✅ NIE rellenado: {nie}")
+            _human_delay(1, 2)
+            
+            # Tomar screenshot después de rellenar NIE
+            take_screenshot(page, "nie_rellenado")
+            
+            # Rellenar nombre con typing humano
+            nom_input = root.locator(sel_nom).first
+            _simulate_mouse_movement(page)
+            nom_input.click()
+            _human_delay(0.5, 1.5)
+            nom_input.fill(nombre, force=ff)
+            logger.info(f"✅ Nombre rellenado: {nombre}")
+            _human_delay(1, 2)
+            
+            # Tomar screenshot después de rellenar nombre
+            take_screenshot(page, "nombre_rellenado")
+            
+            # Seleccionar país
+            pais_input = root.locator(sel_pais).first
+            _simulate_mouse_movement(page)
+            pais_input.click()
+            _human_delay(0.5, 1.5)
+                pais_input.select_option(pais, force=ff)
+            logger.info(f"✅ País seleccionado: {pais}")
+            _human_delay(1, 2)
 
-                logger.info("🖱️ Haciendo clic en botones...")
-                # Buscar y hacer clic en botón "Solicitar Cita" primero
-                _simulate_mouse_movement(page)
-                _human_delay(1, 3)
-                try:
-                    logger.info("🔘 Buscando botón 'Solicitar Cita'...")
-                    # Intentar diferentes selectores para "Solicitar Cita"
-                    solicitando_selectors = [
-                        'button:has-text("Solicitar Cita")',
-                        'input[value="Solicitar Cita"]',
-                        'a:has-text("Solicitar Cita")',
-                        '[role="button"]:has-text("Solicitar Cita")',
-                        '#btnSolicitar',
-                        '.btn-solicitar'
-                    ]
+            # Tomar screenshot del formulario completo
+            take_screenshot(page, "formulario_completo")
+
+            logger.info("🖱️ Haciendo clic en botones...")
+            # Buscar y hacer clic en botón "Solicitar Cita" primero
+            _simulate_mouse_movement(page)
+            _human_delay(1, 3)
+            try:
+                logger.info("🔘 Buscando botón 'Solicitar Cita'...")
+                # Intentar diferentes selectores para "Solicitar Cita"
+                solicitando_selectors = [
+                    'button:has-text("Solicitar Cita")',
+                    'input[value="Solicitar Cita"]',
+                    'a:has-text("Solicitar Cita")',
+                    '[role="button"]:has-text("Solicitar Cita")',
+                    '#btnSolicitar',
+                    '.btn-solicitar'
+                ]
                     
                     boton_encontrado = False
                     for selector in solicitando_selectors:
