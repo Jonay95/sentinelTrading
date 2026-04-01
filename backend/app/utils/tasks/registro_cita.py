@@ -751,6 +751,16 @@ def registro_cita(self) -> bool:
     page = None
     diag_sent_before_nie = False
 
+    # Render: el build debe usar PLAYWRIGHT_BROWSERS_PATH=0 para instalar Chromium en site-packages.
+    # Si en runtime falta o difiere, Playwright busca en ~/.cache (vacío en el worker) y falla.
+    if os.getenv("RENDER", "").lower() in ("true", "1"):
+        if os.getenv("PLAYWRIGHT_BROWSERS_PATH", "").strip() != "0":
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+            logger.info(
+                "Render: PLAYWRIGHT_BROWSERS_PATH=0 aplicado antes de Playwright "
+                "(debe coincidir con el build: playwright install … con la misma variable)."
+            )
+
     try:
         with sync_playwright() as p:
             # Detectar si estamos en producción (Render) o desarrollo

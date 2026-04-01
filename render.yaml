@@ -62,9 +62,10 @@ services:
     runtime: python
     plan: starter
     rootDir: backend
+    # Misma variable en build y runtime: sin 0, Playwright busca en ~/.cache (no persiste en el slug).
     buildCommand: export PLAYWRIGHT_BROWSERS_PATH=0 && pip install -r requirements.txt && playwright install chromium chromium-headless-shell
     # Escuchar todas las colas que usa Beat (si solo "celery", market_data/predictions/… nunca se ejecutan).
-    startCommand: celery -A app.infrastructure.celery_app worker --loglevel=info --concurrency=1 -Q celery,market_data,predictions,evaluations,news,maintenance,monitoring
+    startCommand: PLAYWRIGHT_BROWSERS_PATH=0 celery -A app.infrastructure.celery_app worker --loglevel=info --concurrency=1 -Q celery,market_data,predictions,evaluations,news,maintenance,monitoring
     envVars:
       - key: PLAYWRIGHT_BROWSERS_PATH
         value: "0"
