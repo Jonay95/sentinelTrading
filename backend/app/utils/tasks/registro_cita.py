@@ -12,16 +12,18 @@ from flask_mailman import EmailMessage
 
 from app.infrastructure.celery_app import BaseTask, celery_app
 
+logger = logging.getLogger(__name__)
+
 # Importar playwright-stealth si está disponible
 try:
-    from playwright_stealth import stealth_sync
+    from playwright_stealth import Stealth
     STEALTH_AVAILABLE = True
+    logger.info("✅ playwright-stealth disponible y cargado")
 except ImportError:
     STEALTH_AVAILABLE = False
     logger = logging.getLogger(__name__)
-    logger.info("playwright-stealth no disponible. Instala con: pip install playwright-stealth")
-
-logger = logging.getLogger(__name__)
+    logger.error("❌ playwright-stealth NO disponible. Instala con: pip install playwright-stealth")
+    logger.error("💣 Sin stealth → estás vendido a la detección")
 
 # FrameLocator (iframe) o Frame (documento / iframe resuelto)
 RootLike = Any
@@ -53,11 +55,15 @@ def _apply_stealth(page) -> None:
     """Aplica técnicas de stealth para evitar detección."""
     try:
         if STEALTH_AVAILABLE:
-            stealth_sync(page)
-            logger.info("playwright-stealth aplicado correctamente")
+            logger.info("🛡️ Aplicando playwright-stealth...")
+            stealth_obj = Stealth()
+            stealth_obj.apply_stealth_sync(page)  # 👈 CORREGIDO: apply_stealth_sync
+            logger.info("✅ playwright-stealth aplicado correctamente")
         else:
-            logger.warning("playwright-stealth no disponible, usando técnicas manuales")
-            # Técnicas manuales de stealth
+            logger.error("❌ playwright-stealth no disponible - ALTAMENTE RECOMENDADO INSTALAR")
+            logger.error("💣 Sin stealth → fácilmente detectable por antibots")
+            # Técnicas manuales de stealth (fallback)
+            logger.warning("🔧 Aplicando técnicas manuales de stealth (menos efectivas)")
             page.add_init_script("""
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined,
@@ -68,9 +74,16 @@ def _apply_stealth(page) -> None:
                 Object.defineProperty(navigator, 'languages', {
                     get: () => ['es-ES', 'es', 'en'],
                 });
+                Object.defineProperty(navigator, 'platform', {
+                    get: () => 'Win32',
+                });
+                window.chrome = {
+                    runtime: {},
+                };
             """)
     except Exception as e:
-        logger.warning(f"Error aplicando stealth: {e}")
+        logger.error(f"❌ Error aplicando stealth: {e}")
+        logger.error("💣 Esto puede causar detección inmediata")
 
 
 def _get_realistic_user_agent() -> str:
@@ -566,71 +579,124 @@ def registro_cita(self):
 
         try:
             with sync_playwright() as p:
-                # Configuración mejorada del browser
-                launch_args: list[str] = [
-                    "--no-sandbox",
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-web-security",
-                    "--disable-features=VizDisplayCompositor",
-                    "--disable-background-networking",
-                    "--disable-background-timer-throttling",
-                    "--disable-backgrounding-occluded-windows",
-                    "--disable-renderer-backgrounding",
-                    "--disable-backgrounding-occluded-windows",
-                    "--disable-client-side-phishing-detection",
-                    "--disable-component-extensions-with-background-pages",
-                    "--disable-default-apps",
-                    "--disable-extensions",
-                    "--disable-sync",
-                    "--disable-translate",
-                    "--metrics-recording-only",
-                    "--no-first-run",
-                    "--safebrowsing-disable-auto-update",
-                    "--enable-automation",
-                    "--password-store=basic",
-                    "--use-mock-keychain"
-                ]
+                # 🟢 OPCIÓN 1 - Navegador REAL (la mejor)
+                # Usa tu Chrome real con sesión real → bypass brutal
+                use_real_browser = os.getenv("REGISTRO_CITA_USE_REAL_BROWSER", "true").lower() in ("1", "true", "yes")
                 
-                # Configuración específica para Render/entornos cloud
-                if os.getenv("RENDER", "").strip().lower() in ("true", "1", "yes"):
-                    launch_args.extend([
-                        "--disable-dev-shm-usage",
-                        "--disable-gpu",
-                        "--disable-software-rasterizer",
-                        "--disable-setuid-sandbox"
-                    ])
-                
-                # Headless configurable (importante para testing)
-                headless = os.getenv("REGISTRO_CITA_HEADLESS", "true").lower() in ("1", "true", "yes")
-                
-                browser = p.chromium.launch(headless=headless, args=launch_args)
-                
-                # Contexto realista con configuración avanzada
-                ctx_kw = {
-                    "locale": "es-ES",
-                    "user_agent": _get_realistic_user_agent(),
-                    "viewport": {"width": 1366, "height": 768},
-                    "device_scale_factor": 1.0,
-                    "is_mobile": False,
-                    "has_touch": False,
-                    "java_script_enabled": True,
-                    "extra_http_headers": {
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                        "Accept-Language": "es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3",
-                        "Accept-Encoding": "gzip, deflate, br",
-                        "DNT": "1",
-                        "Connection": "keep-alive",
-                        "Upgrade-Insecure-Requests": "1"
+                if use_real_browser:
+                    logger.info("🟢 Usando navegador REAL con sesión de Chrome")
+                    
+                    # Usar perfil de Chrome SEPARADO para evitar conflictos
+                    chrome_user_data = os.getenv("REGISTRO_CITA_CHROME_PROFILE", 
+                                                "C:/Users/jonay/AppData/Local/Google/Chrome/User Data")
+                    
+                    # Crear perfil específico para el bot
+                    bot_profile_dir = os.path.join(chrome_user_data, "BotProfile")
+                    
+                    browser = p.chromium.launch_persistent_context(
+                        user_data_dir=bot_profile_dir,  # 👈 PERFIL SEPARADO
+                        headless=False,  # 👈 MUY IMPORTANTE - debe ser visible
+                        args=[
+                            "--no-sandbox",
+                            "--disable-blink-features=AutomationControlled",
+                            "--disable-web-security",
+                            "--disable-features=VizDisplayCompositor",
+                            "--disable-background-networking",
+                            "--disable-background-timer-throttling",
+                            "--disable-backgrounding-occluded-windows",
+                            "--disable-renderer-backgrounding",
+                            "--disable-client-side-phishing-detection",
+                            "--disable-component-extensions-with-background-pages",
+                            "--disable-default-apps",
+                            "--disable-extensions",
+                            "--disable-sync",
+                            "--disable-translate",
+                            "--metrics-recording-only",
+                            "--no-first-run",
+                            "--safebrowsing-disable-auto-update",
+                            "--password-store=basic",
+                            "--use-mock-keychain"
+                        ]
+                    )
+                    
+                    # Usar el contexto del navegador persistente
+                    context = browser
+                    page = context.new_page()
+                    
+                else:
+                    # 🟡 OPCIÓN 2 - Playwright normal (fallback)
+                    logger.info("🟡 Usando Playwright normal (sin sesión real)")
+                    
+                    # Configuración mejorada del browser
+                    launch_args: list[str] = [
+                        "--no-sandbox",
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-web-security",
+                        "--disable-features=VizDisplayCompositor",
+                        "--disable-background-networking",
+                        "--disable-background-timer-throttling",
+                        "--disable-backgrounding-occluded-windows",
+                        "--disable-renderer-backgrounding",
+                        "--disable-client-side-phishing-detection",
+                        "--disable-component-extensions-with-background-pages",
+                        "--disable-default-apps",
+                        "--disable-extensions",
+                        "--disable-sync",
+                        "--disable-translate",
+                        "--metrics-recording-only",
+                        "--no-first-run",
+                        "--safebrowsing-disable-auto-update",
+                        "--enable-automation",
+                        "--password-store=basic",
+                        "--use-mock-keychain"
+                    ]
+                    
+                    # Configuración específica para Render/entornos cloud
+                    if os.getenv("RENDER", "").strip().lower() in ("true", "1", "yes"):
+                        launch_args.extend([
+                            "--disable-dev-shm-usage",
+                            "--disable-gpu",
+                            "--disable-software-rasterizer",
+                            "--disable-setuid-sandbox"
+                        ])
+                    
+                    # Headless configurable (importante para testing)
+                    headless = os.getenv("REGISTRO_CITA_HEADLESS", "false").lower() in ("1", "true", "yes")
+                    
+                    if not headless:
+                        logger.info("👁️  MODO VISIBLE ACTIVADO - Podrás ver el navegador")
+                    else:
+                        logger.warning("⚠️  MODO HEADLESS - No podrás ver qué pasa (no recomendado para testing)")
+                    
+                    browser = p.chromium.launch(headless=headless, args=launch_args)
+                    
+                    # Contexto realista con configuración avanzada
+                    ctx_kw = {
+                        "locale": "es-ES",
+                        "timezone_id": "Europe/Madrid",  
+                        "user_agent": _get_realistic_user_agent(),
+                        "viewport": {"width": 1366, "height": 768},
+                        "device_scale_factor": 1.0,
+                        "is_mobile": False,
+                        "has_touch": False,
+                        "java_script_enabled": True,
+                        "extra_http_headers": {
+                            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                            "Accept-Language": "es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3",
+                            "Accept-Encoding": "gzip, deflate, br",
+                            "DNT": "1",
+                            "Connection": "keep-alive",
+                            "Upgrade-Insecure-Requests": "1"
+                        }
                     }
-                }
-                
-                # Ignorar errores HTTPS si está configurado
-                if os.getenv("REGISTRO_CITA_IGNORE_HTTPS_ERRORS", "").lower() in ("1", "true", "yes"):
-                    ctx_kw["ignore_https_errors"] = True
-                    logger.warning("registro_cita: ignore_https_errors activo (TLS no verificado)")
-                
-                context = browser.new_context(**ctx_kw)
-                page = context.new_page()
+                    
+                    # Ignorar errores HTTPS si está configurado
+                    if os.getenv("REGISTRO_CITA_IGNORE_HTTPS_ERRORS", "").lower() in ("1", "true", "yes"):
+                        ctx_kw["ignore_https_errors"] = True
+                        logger.warning("registro_cita: ignore_https_errors activo (TLS no verificado)")
+                    
+                    context = browser.new_context(**ctx_kw)
+                    page = context.new_page()
                 
                 # Aplicar técnicas de stealth
                 _apply_stealth(page)
@@ -643,11 +709,25 @@ def registro_cita(self):
                 page.set_default_timeout(timeout_ms)
                 goto_timeout = _goto_timeout_ms(timeout_ms)
                 
-                # Navegación con delays humanos
+                # Navegación con espera realista (CLAVE)
                 _human_delay(1, 3)
+                logger.info(f"🌐 Navegando a: {url}")
                 _page_goto_resilient(page, url, _goto_wait_until(), goto_timeout)
+                
+                # 👈 ESPERA REAL CLAVE - Dejar que cargue completamente
+                logger.info("⏳ Espera real de 5 segundos para carga completa...")
+                time.sleep(5)
+                
                 _human_delay(2, 4)
                 _simulate_mouse_movement(page)
+                
+                # 🧪 DEBUG: Screenshot para ver qué página carga realmente
+                try:
+                    screenshot_path = "debug_cita_bot.png"
+                    page.screenshot(path=screenshot_path, full_page=True)
+                    logger.info(f"📸 Screenshot guardado en: {screenshot_path}")
+                except Exception as e:
+                    logger.warning(f"No se pudo guardar screenshot: {e}")
 
                 extra_wait = int(os.getenv("REGISTRO_CITA_POST_GOTO_MS", "0") or "0")
                 if extra_wait > 0:
@@ -743,14 +823,34 @@ def registro_cita(self):
                 _get_by_role_click(root, page, "Aceptar", timeout_ms)
                 _human_delay(2, 4)
                 
-                # Click en Solicitar Cita con delay humano
+                # Click en Solicitar Cita con delay humano (si existe)
                 _simulate_mouse_movement(page)
                 _human_delay(1, 3)
-                _get_by_role_click(root, page, "Solicitar Cita", timeout_ms)
-                _human_delay(2, 4)
+                try:
+                    _get_by_role_click(root, page, "Solicitar Cita", timeout_ms)
+                    _human_delay(2, 4)
+                except Exception:
+                    logger.warning("🔍 Botón 'Solicitar Cita' no encontrado, continuando...")
+                    logger.info("✅ Proceso completado hasta donde fue posible")
 
                 hay_citas, sin_citas = _detect_result(page)
-                browser.close()
+                
+                # 🧪 DEBUG: Screenshot final del resultado
+                try:
+                    final_screenshot_path = "debug_cita_bot_final.png"
+                    page.screenshot(path=final_screenshot_path, full_page=True)
+                    logger.info(f"📸 Screenshot final guardado en: {final_screenshot_path}")
+                except Exception as e:
+                    logger.warning(f"No se pudo guardar screenshot final: {e}")
+                
+                # Cerrar browser de forma segura
+                if use_real_browser:
+                    logger.info("🟢 Cerrando navegador REAL (puede que Chrome siga abierto)")
+                    # No cerrar Chrome persistente para que el usuario pueda verlo
+                    # browser.close()  # Comentado para mantener Chrome abierto
+                else:
+                    logger.info("🟡 Cerrando navegador Playwright")
+                    browser.close()
         except Exception as e:
             logger.exception("Error en la automatización de registro cita (Playwright).")
             if _diagnostic_on_error_enabled() and page is not None:
@@ -825,3 +925,4 @@ def registro_cita(self):
         logger.warning(
             "Cita previa: resultado ambiguo (ni selector de sede ni mensaje sin citas)."
         )
+        return False  # 👈 Añadir return False por defecto
