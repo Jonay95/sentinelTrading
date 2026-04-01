@@ -87,7 +87,7 @@ def _build_full_beat_schedule() -> Dict[str, Any]:
     Beat schedule base + tarea opcional registro_cita (intervalo desde .env).
 
     REGISTRO_CITA_BEAT_ENABLED: true/false (defecto true). false desactiva el beat.
-    REGISTRO_CITA_BEAT_INTERVAL_MINUTES: entero 1–1440 (defecto 1).
+    REGISTRO_CITA_BEAT_INTERVAL_MINUTES: entero 1–1440 (defecto 5).
     Solo se programa en Beat si REGISTRO_CITA_URL no está vacía (evita ejecuciones vacías).
     """
     schedule = dict(CeleryConfig.BEAT_SCHEDULE)
@@ -97,9 +97,9 @@ def _build_full_beat_schedule() -> Dict[str, Any]:
     if not (os.environ.get("REGISTRO_CITA_URL") or "").strip():
         return schedule
     try:
-        minutes = int(os.environ.get("REGISTRO_CITA_BEAT_INTERVAL_MINUTES", "1") or "1")
+        minutes = int(os.environ.get("REGISTRO_CITA_BEAT_INTERVAL_MINUTES", "5") or "5")
     except ValueError:
-        minutes = 1
+        minutes = 5
     minutes = max(1, min(minutes, 1440))
     schedule["registro-cita-periodic"] = {
         "task": "app.utils.tasks.registro_cita.registro_cita",

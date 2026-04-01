@@ -120,7 +120,7 @@ services:
       - key: REGISTRO_CITA_URL
         sync: false
       - key: REGISTRO_CITA_BEAT_INTERVAL_MINUTES
-        sync: false
+        value: "5"
       - key: REGISTRO_CITA_BEAT_ENABLED
         sync: false
 
