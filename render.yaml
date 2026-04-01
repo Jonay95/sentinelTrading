@@ -63,12 +63,24 @@ services:
     plan: starter
     rootDir: backend
     buildCommand: export PLAYWRIGHT_BROWSERS_PATH=0 && pip install -r requirements.txt && playwright install chromium chromium-headless-shell
-    startCommand: celery -A app.infrastructure.celery_app worker --loglevel=info --concurrency=1
+    # Escuchar todas las colas que usa Beat (si solo "celery", market_data/predictions/… nunca se ejecutan).
+    startCommand: celery -A app.infrastructure.celery_app worker --loglevel=info --concurrency=1 -Q celery,market_data,predictions,evaluations,news,maintenance,monitoring
     envVars:
       - key: PLAYWRIGHT_BROWSERS_PATH
         value: "0"
       - key: REGISTRO_CITA_NO_SANDBOX
         value: "true"
+      # Mismos valores que en el API / .env local (sync: false = rellenar en el dashboard).
+      - key: REGISTRO_CITA_URL
+        sync: false
+      - key: REGISTRO_CITA_NIE
+        sync: false
+      - key: REGISTRO_CITA_NOMBRE
+        sync: false
+      - key: REGISTRO_CITA_PAIS
+        sync: false
+      - key: REGISTRO_CITA_MAIL_TO
+        sync: false
       - key: CELERY_BROKER_URL
         fromService:
           name: sentinel-celery-redis
@@ -103,6 +115,13 @@ services:
           property: connectionString
       - key: FLASK_ENV
         value: production
+      # Obligatorio para que exista registro-cita-periodic (se decide al arrancar beat).
+      - key: REGISTRO_CITA_URL
+        sync: false
+      - key: REGISTRO_CITA_BEAT_INTERVAL_MINUTES
+        sync: false
+      - key: REGISTRO_CITA_BEAT_ENABLED
+        sync: false
 
   # --- Frontend (estático) ---
   - type: web

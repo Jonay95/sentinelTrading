@@ -115,7 +115,30 @@ celery_app.config_from_object(CeleryConfig)
 # Auto-discover tasks
 celery_app.autodiscover_tasks(['app.infrastructure'])
 
-celery_app.conf.beat_schedule = _build_full_beat_schedule()
+_beat_schedule = _build_full_beat_schedule()
+celery_app.conf.beat_schedule = _beat_schedule
+
+# Diagnóstico al cargar la app (visible en logs de `celery beat` y `celery worker`).
+_reg_en = (os.environ.get("REGISTRO_CITA_BEAT_ENABLED") or "true").strip().lower()
+if _reg_en in ("0", "false", "no", "off"):
+    logger.warning(
+        "Celery: registro_cita no está en el beat (REGISTRO_CITA_BEAT_ENABLED desactivado)."
+    )
+elif not (os.environ.get("REGISTRO_CITA_URL") or "").strip():
+    logger.warning(
+        "Celery: registro_cita no está en el beat: falta REGISTRO_CITA_URL en las variables "
+        "de entorno de este proceso. En Render, configúrala también en sentinel-celery-beat "
+        "(no solo en el API o en el worker)."
+    )
+elif "registro-cita-periodic" in _beat_schedule:
+    _reg_sched = _beat_schedule["registro-cita-periodic"]["schedule"]
+    if isinstance(_reg_sched, timedelta):
+        logger.info(
+            "Celery: registro-cita-periodic cada %.0f minutos.",
+            _reg_sched.total_seconds() / 60.0,
+        )
+    else:
+        logger.info("Celery: registro-cita-periodic programada (%s).", _reg_sched)
 
 
 class BaseTask(Task, LoggerMixin):
