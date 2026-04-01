@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from celery import Celery, Task
-from celery.signals import task_prerun, task_postrun, task_failure, task_success
+from celery.signals import beat_init, task_prerun, task_postrun, task_failure, task_success
 from celery.schedules import crontab
 import redis
 
@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 class CeleryConfig:
     """Celery configuration settings."""
     
-    # Broker configuration
-    BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/1')
-    RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/2')
+    # Broker (nombres en minúsculas; Celery 6 eliminará BROKER_URL / RESULT_BACKEND en mayúsculas)
+    broker_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/1")
+    result_backend = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/2")
     
     # Task settings
     TASK_SERIALIZER = 'json'
@@ -104,6 +104,7 @@ def _build_full_beat_schedule() -> Dict[str, Any]:
     schedule["registro-cita-periodic"] = {
         "task": "app.utils.tasks.registro_cita.registro_cita",
         "schedule": timedelta(minutes=minutes),
+        "options": {"queue": "celery"},
     }
     return schedule
 
@@ -199,6 +200,15 @@ def task_success_handler(sender, result=None, **kwargs):
 def task_failure_handler(sender, task_id, exception, **kwargs):
     """Log task failure."""
     logger.error(f"Task failed: {sender.name}[{task_id}] - {exception}")
+
+
+@beat_init.connect
+def _beat_init_log_execution_is_on_worker(sender, **kwargs):
+    """Aclara en logs de Render que Beat no ejecuta las tareas."""
+    logger.info(
+        "Beat encola en Redis; la ejecución (p. ej. registro_cita / Playwright) se ve en los logs "
+        "del Celery worker. Aquí deberían aparecer líneas 'Scheduler: Sending due task …' cada intervalo."
+    )
 
 
 class TaskMonitor(LoggerMixin):

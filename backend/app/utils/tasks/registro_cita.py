@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from flask_mailman import EmailMessage
+from playwright.sync_api import sync_playwright
 
 from app.infrastructure.celery_app import BaseTask, celery_app
 
@@ -545,21 +546,22 @@ def _send_diagnostic_mail(
     subject_tag: str,
     body: str,
 ) -> None:
-    sender = app.config.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
-    if not sender:
-        logger.warning("MAIL_DEFAULT_SENDER no configurado; no se envía diagnóstico.")
-        return
-    try:
-        msg = EmailMessage(
-            subject=f"Cita previa [diagnóstico] {subject_tag}",
-            body=body,
-            from_email=sender,
-            to=mail_to,
-        )
-        msg.send()
-        logger.info("Correo de diagnóstico cita previa enviado (%s).", subject_tag)
-    except Exception:
-        logger.exception("No se pudo enviar el correo de diagnóstico cita previa.")
+    with app.app_context():
+        sender = app.config.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
+        if not sender:
+            logger.warning("MAIL_DEFAULT_SENDER no configurado; no se envía diagnóstico.")
+            return
+        try:
+            msg = EmailMessage(
+                subject=f"Cita previa [diagnóstico] {subject_tag}",
+                body=body,
+                from_email=sender,
+                to=mail_to,
+            )
+            msg.send()
+            logger.info("Correo de diagnóstico cita previa enviado (%s).", subject_tag)
+        except Exception:
+            logger.exception("No se pudo enviar el correo de diagnóstico cita previa.")
 
 
 def _send_execution_report_mail(
@@ -575,18 +577,17 @@ def _send_execution_report_mail(
     Envía un email con el reporte de cada ejecución del bot, incluyendo screenshots.
     """
     from datetime import datetime
-    import os
-    
-    sender = app.config.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
-    if not sender:
-        logger.warning("MAIL_DEFAULT_SENDER no configurado; no se envía reporte de ejecución.")
-        return
-    
-    try:
-        # Crear el cuerpo del email
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        body = f"""
+
+    with app.app_context():
+        sender = app.config.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
+        if not sender:
+            logger.warning("MAIL_DEFAULT_SENDER no configurado; no se envía reporte de ejecución.")
+            return
+
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            body = f"""
 🤖 REPORTE DE EJECUCIÓN - BOT DE CITAS
 ====================================
 
@@ -599,17 +600,16 @@ def _send_execution_report_mail(
 
 📸 Screenshots adjuntos: {len(screenshots)}
 """
-        
-        # Añadir detalles de los screenshots
-        if screenshots:
-            body += "\n📋 Detalles de capturas:\n"
-            for i, screenshot in enumerate(screenshots, 1):
-                if os.path.exists(screenshot):
-                    body += f"   {i}. {screenshot} ✅\n"
-                else:
-                    body += f"   {i}. {screenshot} ❌ (no encontrado)\n"
-        
-        body += f"""
+
+            if screenshots:
+                body += "\n📋 Detalles de capturas:\n"
+                for i, screenshot in enumerate(screenshots, 1):
+                    if os.path.exists(screenshot):
+                        body += f"   {i}. {screenshot} ✅\n"
+                    else:
+                        body += f"   {i}. {screenshot} ❌ (no encontrado)\n"
+
+            body += f"""
 
 🔧 Configuración del bot:
 - Ambiente: {'Producción (Render)' if os.getenv('RENDER', '').lower() in ('true', '1') else 'Desarrollo'}
@@ -623,53 +623,57 @@ def _send_execution_report_mail(
 
 🚀 Bot de Citas - Sistema Automatizado
 """
-        
-        # Crear el mensaje con adjuntos
-        from django.core.mail import EmailMessage
-        
-        msg = EmailMessage(
-            subject=f"🤖 Bot Citas - Reporte Ejecución: {resultado}",
-            body=body,
-            from_email=sender,
-            to=mail_to,
-        )
-        
-        # Adjuntar screenshots si existen
-        attachments_added = 0
-        for screenshot_path in screenshots:
-            if os.path.exists(screenshot_path):
-                try:
-                    with open(screenshot_path, 'rb') as f:
-                        msg.attach(f"screenshot_{os.path.basename(screenshot_path)}", f.read(), 'image/png')
-                        attachments_added += 1
-                        logger.info(f"📎 Screenshot adjuntado: {screenshot_path}")
-                except Exception as e:
-                    logger.warning(f"⚠️ Error adjuntando screenshot {screenshot_path}: {e}")
-        
-        # Enviar el email
-        msg.send()
-        logger.info(f"📧 Reporte de ejecución enviado: {resultado} ({attachments_added} screenshots adjuntados)")
-        
-    except Exception as e:
-        logger.exception(f"❌ Error enviando reporte de ejecución: {e}")
+
+            msg = EmailMessage(
+                subject=f"🤖 Bot Citas - Reporte Ejecución: {resultado}",
+                body=body,
+                from_email=sender,
+                to=mail_to,
+            )
+
+            attachments_added = 0
+            for screenshot_path in screenshots:
+                if os.path.exists(screenshot_path):
+                    try:
+                        with open(screenshot_path, "rb") as f:
+                            msg.attach(
+                                f"screenshot_{os.path.basename(screenshot_path)}",
+                                f.read(),
+                                "image/png",
+                            )
+                            attachments_added += 1
+                            logger.info(f"📎 Screenshot adjuntado: {screenshot_path}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error adjuntando screenshot {screenshot_path}: {e}")
+
+            msg.send()
+            logger.info(
+                "📧 Reporte de ejecución enviado: %s (%s screenshots adjuntados)",
+                resultado,
+                attachments_added,
+            )
+
+        except Exception:
+            logger.exception("❌ Error enviando reporte de ejecución")
 
 
 def _send_aviso_mail(app, url: str, mail_to: list[str]) -> None:
-    sender = app.config.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
-    if not sender:
-        logger.warning("MAIL_DEFAULT_SENDER no configurado; no se envía el aviso.")
-        return
-    msg = EmailMessage(
-        subject="Cita previa: hay citas disponibles",
-        body=(
-            "Se ha detectado que hay citas disponibles en el flujo configurado "
-            f"(comprobación automática).\n\nURL consultada:\n{url}\n\n"
-            "Entra en la web y completa la reserva manualmente si aún lo necesitas."
-        ),
-        from_email=sender,
-        to=mail_to,
-    )
-    msg.send()
+    with app.app_context():
+        sender = app.config.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
+        if not sender:
+            logger.warning("MAIL_DEFAULT_SENDER no configurado; no se envía el aviso.")
+            return
+        msg = EmailMessage(
+            subject="Cita previa: hay citas disponibles",
+            body=(
+                "Se ha detectado que hay citas disponibles en el flujo configurado "
+                f"(comprobación automática).\n\nURL consultada:\n{url}\n\n"
+                "Entra en la web y completa la reserva manualmente si aún lo necesitas."
+            ),
+            from_email=sender,
+            to=mail_to,
+        )
+        msg.send()
 
 
 @celery_app.task(
@@ -687,12 +691,15 @@ def registro_cita(self) -> bool:
     """
     from datetime import datetime
     import time
-    
+
+    from app import create_app
+
     # Tiempo de inicio para medir duración
     start_time = time.time()
     execution_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    app = self.app
+
+    # self.app es la instancia Celery; el correo y config requieren la app Flask
+    flask_app = create_app()
     url = os.getenv("REGISTRO_CITA_URL")
     if not url:
         logger.error("REGISTRO_CITA_URL no configurada")
@@ -947,7 +954,7 @@ def registro_cita(self) -> bool:
                 if _diagnostic_email_enabled():
                     body = _format_page_diagnostic(url, page)
                     _send_diagnostic_mail(
-                        app,
+                        flask_app,
                         mail_to,
                         "BLOQUEO firewall/IPS — revisar IT",
                         body,
@@ -989,7 +996,7 @@ def registro_cita(self) -> bool:
             if _diagnostic_email_enabled():
                 body = _format_page_diagnostic(url, page)
                 _send_diagnostic_mail(
-                    app,
+                    flask_app,
                     mail_to,
                     "antes del formulario NIE",
                     body,
@@ -1158,8 +1165,13 @@ def registro_cita(self) -> bool:
         execution_time = f"{time.time() - start_time:.1f}s"
         try:
             _send_execution_report_mail(
-                app, mail_to, f"ERROR: {type(e).__name__}", screenshots_taken,
-                execution_time, url, nie or "No configurado"
+                flask_app,
+                mail_to,
+                f"ERROR: {type(e).__name__}",
+                screenshots_taken,
+                execution_time,
+                url,
+                nie or "No configurado",
             )
         except Exception as report_error:
             logger.warning(f"⚠️ Error enviando reporte de error: {report_error}")
@@ -1182,7 +1194,7 @@ def registro_cita(self) -> bool:
                         f"Título: {tit}"
                     )
                     _send_diagnostic_mail(
-                        app,
+                        flask_app,
                         mail_to,
                         "error (resumen)",
                         short,
@@ -1191,7 +1203,7 @@ def registro_cita(self) -> bool:
                     body = _format_page_diagnostic(url, page)
                     body += f"\n\n--- Excepción ---\n{type(e).__name__}: {e}"
                     _send_diagnostic_mail(
-                        app,
+                        flask_app,
                         mail_to,
                         "error",
                         body,
@@ -1213,66 +1225,78 @@ def registro_cita(self) -> bool:
             )
         raise
 
-        if sin_citas:
-            logger.info("📋 RESULTADO: Sin citas disponibles")
-            logger.info("🔄 No hay citas - continuando monitoreo...")
-            state["already_notified"] = False
-            _save_state(state)
-            
-            # Enviar reporte de ejecución
-            execution_time = f"{time.time() - start_time:.1f}s"
-            try:
-                _send_execution_report_mail(
-                    app, mail_to, "SIN CITAS", screenshots_taken, 
-                    execution_time, url, nie or "No configurado"
-                )
-            except Exception as e:
-                logger.warning(f"⚠️ Error enviando reporte: {e}")
-            
-            logger.info("Cita previa: sin citas disponibles (continuando monitoreo).")
-            return False
+    if sin_citas:
+        logger.info("📋 RESULTADO: Sin citas disponibles")
+        logger.info("🔄 No hay citas - continuando monitoreo...")
+        state["already_notified"] = False
+        _save_state(state)
 
-        if hay_citas:
-            logger.info("🎉 RESULTADO: ¡CITAS DISPONIBLES!")
-            if not state.get("already_notified"):
-                logger.info("📧 Enviando email de aviso de citas disponibles...")
-                try:
-                    _send_aviso_mail(app, url, mail_to)
-                    logger.info("✅ Email de aviso enviado correctamente")
-                except Exception:
-                    logger.exception("Error al enviar correo de aviso de cita previa.")
-                    return
-                state["already_notified"] = True
-                _save_state(state)
-                logger.info("Cita previa: aviso por correo enviado (citas detectadas).")
-            else:
-                logger.debug("Cita previa: citas disponibles; aviso ya enviado previamente.")
-            
-            # Enviar reporte de ejecución
-            execution_time = f"{time.time() - start_time:.1f}s"
-            try:
-                _send_execution_report_mail(
-                    app, mail_to, "CITAS DISPONIBLES", screenshots_taken, 
-                    execution_time, url, nie or "No configurado"
-                )
-            except Exception as e:
-                logger.warning(f"⚠️ Error enviando reporte: {e}")
-            
-            return True
-
-        logger.warning(
-            "Cita previa: resultado ambiguo (ni selector de sede ni mensaje sin citas)."
-        )
-        logger.info("🤷 RESULTADO: Ambiguo - no se pudo determinar si hay citas o no")
-        
-        # Enviar reporte de ejecución
         execution_time = f"{time.time() - start_time:.1f}s"
         try:
             _send_execution_report_mail(
-                app, mail_to, "RESULTADO AMBIGUO", screenshots_taken, 
-                execution_time, url, nie or "No configurado"
+                flask_app,
+                mail_to,
+                "SIN CITAS",
+                screenshots_taken,
+                execution_time,
+                url,
+                nie or "No configurado",
             )
-        except Exception as e:
-            logger.warning(f"⚠️ Error enviando reporte: {e}")
-        
+        except Exception as ex:
+            logger.warning(f"⚠️ Error enviando reporte: {ex}")
+
+        logger.info("Cita previa: sin citas disponibles (continuando monitoreo).")
         return False
+
+    if hay_citas:
+        logger.info("🎉 RESULTADO: ¡CITAS DISPONIBLES!")
+        if not state.get("already_notified"):
+            logger.info("📧 Enviando email de aviso de citas disponibles...")
+            try:
+                _send_aviso_mail(flask_app, url, mail_to)
+                logger.info("✅ Email de aviso enviado correctamente")
+            except Exception:
+                logger.exception("Error al enviar correo de aviso de cita previa.")
+                return False
+            state["already_notified"] = True
+            _save_state(state)
+            logger.info("Cita previa: aviso por correo enviado (citas detectadas).")
+        else:
+            logger.debug("Cita previa: citas disponibles; aviso ya enviado previamente.")
+
+        execution_time = f"{time.time() - start_time:.1f}s"
+        try:
+            _send_execution_report_mail(
+                flask_app,
+                mail_to,
+                "CITAS DISPONIBLES",
+                screenshots_taken,
+                execution_time,
+                url,
+                nie or "No configurado",
+            )
+        except Exception as ex:
+            logger.warning(f"⚠️ Error enviando reporte: {ex}")
+
+        return True
+
+    logger.warning(
+        "Cita previa: resultado ambiguo (ni selector de sede ni mensaje sin citas)."
+    )
+    logger.info("🤷 RESULTADO: Ambiguo - no se pudo determinar si hay citas o no")
+
+    execution_time = f"{time.time() - start_time:.1f}s"
+    try:
+        _send_execution_report_mail(
+            flask_app,
+            mail_to,
+            "RESULTADO AMBIGUO",
+            screenshots_taken,
+            execution_time,
+            url,
+            nie or "No configurado",
+        )
+    except Exception as ex:
+        logger.warning(f"⚠️ Error enviando reporte: {ex}")
+
+    return False
