@@ -1036,7 +1036,7 @@ def registro_cita(self) -> bool:
             _simulate_mouse_movement(page)
             pais_input.click()
             _human_delay(0.5, 1.5)
-                pais_input.select_option(pais, force=ff)
+            pais_input.select_option(pais, force=ff)
             logger.info(f"✅ País seleccionado: {pais}")
             _human_delay(1, 2)
 
@@ -1058,160 +1058,160 @@ def registro_cita(self) -> bool:
                     '#btnSolicitar',
                     '.btn-solicitar'
                 ]
-                    
-                    boton_encontrado = False
-                    for selector in solicitando_selectors:
-                        try:
-                            element = page.query_selector(selector)
-                            if element:
-                                element.click()
-                                logger.info(f"✅ Botón 'Solicitar Cita' clicado con selector: {selector}")
-                                boton_encontrado = True
-                                break
-                        except Exception:
-                            continue
-                    
-                    if not boton_encontrado:
-                        logger.warning("🔍 Botón 'Solicitar Cita' no encontrado con ningún selector")
-                    
-                    _human_delay(2, 4)
-                except Exception as e:
-                    logger.warning(f"❌ Error buscando 'Solicitar Cita': {e}")
-                
-                # Buscar y hacer clic en botón "Aceptar" (btnEnviar)
-                _simulate_mouse_movement(page)
-                _human_delay(1, 3)
-                try:
-                    logger.info("🔘 Buscando botón 'Aceptar' (btnEnviar)...")
-                    # Intentar diferentes selectores para "Aceptar"
-                    aceptar_selectors = [
-                        '#btnEnviar',
-                        'input#btnEnviar[type="button"]',
-                        'input[value="Aceptar"]',
-                        'button:has-text("Aceptar")',
-                        '.mf-button.primary',
-                        'input.mf-button.primary'
-                    ]
-                    
-                    boton_aceptar_encontrado = False
-                    for selector in aceptar_selectors:
-                        try:
-                            element = page.query_selector(selector)
-                            if element:
-                                element.click()
-                                logger.info(f"✅ Botón 'Aceptar' clicado con selector: {selector}")
-                                boton_aceptar_encontrado = True
-                                break
-                        except Exception:
-                            continue
-                    
-                    if not boton_aceptar_encontrado:
-                        logger.warning("🔍 Botón 'Aceptar' no encontrado con ningún selector")
-                    
-                    _human_delay(2, 4)
-                except Exception as e:
-                    logger.warning(f"❌ Error buscando 'Aceptar': {e}")
-                
-                # Si no se encontró ningún botón, intentar hacer clic por rol
-                if not boton_encontrado and not boton_aceptar_encontrado:
-                    logger.info("� Intentando clic por rol como fallback...")
-                    try:
-                        _get_by_role_click(root, page, "Aceptar", timeout_ms)
-                        logger.info("✅ Botón 'Aceptar' clicado por rol")
-                    except Exception:
-                        try:
-                            _get_by_role_click(root, page, "Solicitar Cita", timeout_ms)
-                            logger.info("✅ Botón 'Solicitar Cita' clicado por rol")
-                        except Exception:
-                            logger.warning("🔍 No se pudo hacer clic en ningún botón")
-                            logger.info("✅ Proceso completado hasta donde fue posible")
 
-                logger.info("🔍 Detectando resultados...")
-                try:
-                    hay_citas, sin_citas = _detect_result(page)
-                    logger.info(f"📊 Resultado detección: hay_citas={hay_citas}, sin_citas={sin_citas}")
-                except Exception as e:
-                    logger.warning(f"❌ Error en detección de resultados: {e}")
-                    logger.info("🤷 RESULTADO: Error en detección - asumiendo que no hay citas")
-                    hay_citas, sin_citas = False, True
-                
-                # 🧪 DEBUG: Screenshot final del resultado
-                try:
-                    final_screenshot_path = "debug_cita_bot_final.png"
-                    page.screenshot(path=final_screenshot_path, full_page=True)
-                    logger.info(f"📸 Screenshot final guardado en: {final_screenshot_path}")
-                except Exception as e:
-                    logger.warning(f"No se pudo guardar screenshot final: {e}")
-                
-                # Cerrar browser de forma segura
-                if use_real_browser:
-                    logger.info("🟢 Cerrando navegador REAL (puede que Chrome siga abierto)")
-                    # No cerrar Chrome persistente para que el usuario pueda verlo
-                    # browser.close()  # Comentado para mantener Chrome abierto
-                else:
-                    logger.info("🟡 Cerrando navegador Playwright")
-                    browser.close()
-        except Exception as e:
-            logger.exception("Error en la automatización de registro cita (Playwright).")
-            
-            # Enviar reporte de ejecución con error
-            execution_time = f"{time.time() - start_time:.1f}s"
+                boton_encontrado = False
+                for selector in solicitando_selectors:
+                    try:
+                        element = page.query_selector(selector)
+                        if element:
+                            element.click()
+                            logger.info(f"✅ Botón 'Solicitar Cita' clicado con selector: {selector}")
+                            boton_encontrado = True
+                            break
+                    except Exception:
+                        continue
+
+                if not boton_encontrado:
+                    logger.warning("🔍 Botón 'Solicitar Cita' no encontrado con ningún selector")
+
+                _human_delay(2, 4)
+            except Exception as e:
+                logger.warning(f"❌ Error buscando 'Solicitar Cita': {e}")
+
+            # Buscar y hacer clic en botón "Aceptar" (btnEnviar)
+            _simulate_mouse_movement(page)
+            _human_delay(1, 3)
             try:
-                _send_execution_report_mail(
-                    app, mail_to, f"ERROR: {type(e).__name__}", screenshots_taken, 
-                    execution_time, url, nie or "No configurado"
-                )
-            except Exception as report_error:
-                logger.warning(f"⚠️ Error enviando reporte de error: {report_error}")
-            
-            if _diagnostic_on_error_enabled() and page is not None:
+                logger.info("🔘 Buscando botón 'Aceptar' (btnEnviar)...")
+                # Intentar diferentes selectores para "Aceptar"
+                aceptar_selectors = [
+                    '#btnEnviar',
+                    'input#btnEnviar[type="button"]',
+                    'input[value="Aceptar"]',
+                    'button:has-text("Aceptar")',
+                    '.mf-button.primary',
+                    'input.mf-button.primary'
+                ]
+
+                boton_aceptar_encontrado = False
+                for selector in aceptar_selectors:
+                    try:
+                        element = page.query_selector(selector)
+                        if element:
+                            element.click()
+                            logger.info(f"✅ Botón 'Aceptar' clicado con selector: {selector}")
+                            boton_aceptar_encontrado = True
+                            break
+                    except Exception:
+                        continue
+                    
+                if not boton_aceptar_encontrado:
+                    logger.warning("🔍 Botón 'Aceptar' no encontrado con ningún selector")
+                    
+                _human_delay(2, 4)
+            except Exception as e:
+                logger.warning(f"❌ Error buscando 'Aceptar': {e}")
+                
+            # Si no se encontró ningún botón, intentar hacer clic por rol
+            if not boton_encontrado and not boton_aceptar_encontrado:
+                logger.info("🔄 Intentando clic por rol como fallback...")
                 try:
-                    if diag_sent_before_nie:
-                        try:
-                            tit = page.title()
-                        except Exception:
-                            tit = "(no disponible)"
-                        try:
-                            purl = page.url
-                        except Exception:
-                            purl = "(no disponible)"
-                        short = (
-                            f"Fallo después del correo de diagnóstico previo.\n\n"
-                            f"{type(e).__name__}: {e}\n\n"
-                            f"URL actual: {purl}\n"
-                            f"Título: {tit}"
-                        )
-                        _send_diagnostic_mail(
-                            app,
-                            mail_to,
-                            "error (resumen)",
-                            short,
-                        )
-                    else:
-                        body = _format_page_diagnostic(url, page)
-                        body += f"\n\n--- Excepción ---\n{type(e).__name__}: {e}"
-                        _send_diagnostic_mail(
-                            app,
-                            mail_to,
-                            "error",
-                            body,
-                        )
+                    _get_by_role_click(root, page, "Aceptar", timeout_ms)
+                    logger.info("✅ Botón 'Aceptar' clicado por rol")
                 except Exception:
-                    logger.exception("Diagnóstico tras error: no se pudo capturar/enviar.")
-            err = str(e).lower()
-            if "libgbm" in err or "shared libraries" in err or "error while loading shared libraries" in err:
-                logger.error(
-                    "Chromium de Playwright no arranca: faltan librerías del sistema. "
-                    "En Ubuntu/Debian (usuario con sudo): sudo apt install -y libgbm1 "
-                    "o, desde el venv con permisos adecuados: playwright install-deps chromium"
-                )
-            if "executable doesn't exist" in err or "playwright install" in err:
-                logger.error(
-                    "Playwright: faltan binarios del navegador. En build: "
-                    "PLAYWRIGHT_BROWSERS_PATH=0 pip install -r requirements.txt && playwright install chromium; "
-                    "en runtime: env PLAYWRIGHT_BROWSERS_PATH=0 (Render/workers)."
-                )
-            raise
+                    try:
+                        _get_by_role_click(root, page, "Solicitar Cita", timeout_ms)
+                        logger.info("✅ Botón 'Solicitar Cita' clicado por rol")
+                    except Exception:
+                        logger.warning("🔍 No se pudo hacer clic en ningún botón")
+                        logger.info("✅ Proceso completado hasta donde fue posible")
+
+            logger.info("🔍 Detectando resultados...")
+            try:
+                hay_citas, sin_citas = _detect_result(page)
+                logger.info(f"📊 Resultado detección: hay_citas={hay_citas}, sin_citas={sin_citas}")
+            except Exception as e:
+                logger.warning(f"❌ Error en detección de resultados: {e}")
+                logger.info("🤷 RESULTADO: Error en detección - asumiendo que no hay citas")
+                hay_citas, sin_citas = False, True
+                
+            # 🧪 DEBUG: Screenshot final del resultado
+            try:
+                final_screenshot_path = "debug_cita_bot_final.png"
+                page.screenshot(path=final_screenshot_path, full_page=True)
+                logger.info(f"📸 Screenshot final guardado en: {final_screenshot_path}")
+            except Exception as e:
+                logger.warning(f"No se pudo guardar screenshot final: {e}")
+                
+            # Cerrar browser de forma segura
+            if use_real_browser:
+                logger.info("🟢 Cerrando navegador REAL (puede que Chrome siga abierto)")
+                # No cerrar Chrome persistente para que el usuario pueda verlo
+                # browser.close()  # Comentado para mantener Chrome abierto
+            else:
+                logger.info("🟡 Cerrando navegador Playwright")
+                browser.close()
+    except Exception as e:
+        logger.exception("Error en la automatización de registro cita (Playwright).")
+
+        # Enviar reporte de ejecución con error
+        execution_time = f"{time.time() - start_time:.1f}s"
+        try:
+            _send_execution_report_mail(
+                app, mail_to, f"ERROR: {type(e).__name__}", screenshots_taken,
+                execution_time, url, nie or "No configurado"
+            )
+        except Exception as report_error:
+            logger.warning(f"⚠️ Error enviando reporte de error: {report_error}")
+
+        if _diagnostic_on_error_enabled() and page is not None:
+            try:
+                if diag_sent_before_nie:
+                    try:
+                        tit = page.title()
+                    except Exception:
+                        tit = "(no disponible)"
+                    try:
+                        purl = page.url
+                    except Exception:
+                        purl = "(no disponible)"
+                    short = (
+                        f"Fallo después del correo de diagnóstico previo.\n\n"
+                        f"{type(e).__name__}: {e}\n\n"
+                        f"URL actual: {purl}\n"
+                        f"Título: {tit}"
+                    )
+                    _send_diagnostic_mail(
+                        app,
+                        mail_to,
+                        "error (resumen)",
+                        short,
+                    )
+                else:
+                    body = _format_page_diagnostic(url, page)
+                    body += f"\n\n--- Excepción ---\n{type(e).__name__}: {e}"
+                    _send_diagnostic_mail(
+                        app,
+                        mail_to,
+                        "error",
+                        body,
+                    )
+            except Exception:
+                logger.exception("Diagnóstico tras error: no se pudo capturar/enviar.")
+        err = str(e).lower()
+        if "libgbm" in err or "shared libraries" in err or "error while loading shared libraries" in err:
+            logger.error(
+                "Chromium de Playwright no arranca: faltan librerías del sistema. "
+                "En Ubuntu/Debian (usuario con sudo): sudo apt install -y libgbm1 "
+                "o, desde el venv con permisos adecuados: playwright install-deps chromium"
+            )
+        if "executable doesn't exist" in err or "playwright install" in err:
+            logger.error(
+                "Playwright: faltan binarios del navegador. En build: "
+                "PLAYWRIGHT_BROWSERS_PATH=0 pip install -r requirements.txt && playwright install chromium; "
+                "en runtime: env PLAYWRIGHT_BROWSERS_PATH=0 (Render/workers)."
+            )
+        raise
 
         if sin_citas:
             logger.info("📋 RESULTADO: Sin citas disponibles")
