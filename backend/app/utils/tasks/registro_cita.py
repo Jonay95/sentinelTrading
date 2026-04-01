@@ -562,6 +562,98 @@ def _send_diagnostic_mail(
         logger.exception("No se pudo enviar el correo de diagnóstico cita previa.")
 
 
+def _send_execution_report_mail(
+    app,
+    mail_to: list[str],
+    resultado: str,
+    screenshots: list[str],
+    execution_time: str,
+    url: str,
+    nie: str,
+) -> None:
+    """
+    Envía un email con el reporte de cada ejecución del bot, incluyendo screenshots.
+    """
+    from datetime import datetime
+    import os
+    
+    sender = app.config.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
+    if not sender:
+        logger.warning("MAIL_DEFAULT_SENDER no configurado; no se envía reporte de ejecución.")
+        return
+    
+    try:
+        # Crear el cuerpo del email
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        body = f"""
+🤖 REPORTE DE EJECUCIÓN - BOT DE CITAS
+====================================
+
+📅 Fecha y hora: {timestamp}
+⏱️ Duración: {execution_time}
+🆔 NIE utilizado: {nie}
+🌐 URL consultada: {url}
+
+📊 RESULTADO: {resultado}
+
+📸 Screenshots adjuntos: {len(screenshots)}
+"""
+        
+        # Añadir detalles de los screenshots
+        if screenshots:
+            body += "\n📋 Detalles de capturas:\n"
+            for i, screenshot in enumerate(screenshots, 1):
+                if os.path.exists(screenshot):
+                    body += f"   {i}. {screenshot} ✅\n"
+                else:
+                    body += f"   {i}. {screenshot} ❌ (no encontrado)\n"
+        
+        body += f"""
+
+🔧 Configuración del bot:
+- Ambiente: {'Producción (Render)' if os.getenv('RENDER', '').lower() in ('true', '1') else 'Desarrollo'}
+- Headless: {'Sí' if os.getenv('REGISTRO_CITA_HEADLESS', 'false').lower() in ('true', '1') else 'No'}
+- Stealth: {'Disponible' if os.getenv('PLAYWRIGHT_STEALTH_AVAILABLE', '').lower() in ('true', '1') else 'No disponible'}
+
+📌 Notas:
+- Este email se envía automáticamente en cada ejecución
+- Los screenshots muestran el estado del proceso
+- Revisa las capturas para verificar el funcionamiento
+
+🚀 Bot de Citas - Sistema Automatizado
+"""
+        
+        # Crear el mensaje con adjuntos
+        from django.core.mail import EmailMessage
+        
+        msg = EmailMessage(
+            subject=f"🤖 Bot Citas - Reporte Ejecución: {resultado}",
+            body=body,
+            from_email=sender,
+            to=mail_to,
+        )
+        
+        # Adjuntar screenshots si existen
+        attachments_added = 0
+        for screenshot_path in screenshots:
+            if os.path.exists(screenshot_path):
+                try:
+                    with open(screenshot_path, 'rb') as f:
+                        msg.attach(f"screenshot_{os.path.basename(screenshot_path)}", f.read(), 'image/png')
+                        attachments_added += 1
+                        logger.info(f"📎 Screenshot adjuntado: {screenshot_path}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error adjuntando screenshot {screenshot_path}: {e}")
+        
+        # Enviar el email
+        msg.send()
+        logger.info(f"📧 Reporte de ejecución enviado: {resultado} ({attachments_added} screenshots adjuntados)")
+        
+    except Exception as e:
+        logger.exception(f"❌ Error enviando reporte de ejecución: {e}")
+
+
 def _send_aviso_mail(app, url: str, mail_to: list[str]) -> None:
     sender = app.config.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
     if not sender:
@@ -588,129 +680,177 @@ def _send_aviso_mail(app, url: str, mail_to: list[str]) -> None:
     soft_time_limit=540,
     cache_result=False,
 )
-def registro_cita(self):
-    from app import create_app
+def registro_cita(self) -> bool:
+    """
+    Tarea principal que automatiza el registro de cita previa.
+    Ahora envía un reporte de ejecución con screenshots en cada ejecución.
+    """
+    from datetime import datetime
+    import time
+    
+    # Tiempo de inicio para medir duración
+    start_time = time.time()
+    execution_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    app = self.app
+    url = os.getenv("REGISTRO_CITA_URL")
+    if not url:
+        logger.error("REGISTRO_CITA_URL no configurada")
+        return False
 
-    app = create_app()
-    with app.app_context():
-        logger.info("🚀 INICIO DE TAREA registro_cita - Bot de Citas")
-        logger.info("📋 Configuración:")
-        logger.info(f"   📍 Provincia: {os.getenv('REGISTRO_CITA_PROVINCIA', 'No configurada')}")
-        logger.info(f"   🆔 NIE: {os.getenv('REGISTRO_CITA_NIE', 'No configurado')}")
-        logger.info(f"   👤 Nombre: {os.getenv('REGISTRO_CITA_NOMBRE', 'No configurado')}")
-        logger.info(f"   🌍 País: {os.getenv('REGISTRO_CITA_PAIS', 'No configurado')}")
-        logger.info(f"   📧 Email: {os.getenv('REGISTRO_CITA_MAIL_TO', 'No configurado')}")
-        logger.info(f"   🧙 Stealth: {os.getenv('REGISTRO_CITA_STEALTH', 'false')}")
-        logger.info(f"   👁️ Headless: {os.getenv('REGISTRO_CITA_HEADLESS', 'true')}")
-        
-        url = (os.getenv("REGISTRO_CITA_URL") or "").strip()
-        if not url:
-            logger.debug("REGISTRO_CITA_URL vacía; se omite la tarea registro_cita.")
-            return
+    mail_to = [email.strip() for email in os.getenv("REGISTRO_CITA_MAIL_TO", "").split(",") if email.strip()]
+    if not mail_to:
+        logger.warning("REGISTRO_CITA_MAIL_TO no configurado; no se enviarán correos.")
+    
+    nie = os.getenv("REGISTRO_CITA_NIE")
+    nombre = os.getenv("REGISTRO_CITA_NOMBRE")
+    pais = os.getenv("REGISTRO_CITA_PAIS")
+    
+    # Lista para almacenar paths de screenshots
+    screenshots_taken = []
+    
+    logger.info("🚀 INICIO DE TAREA registro_cita - Bot de Citas")
+    logger.info("📋 Configuración:")
+    logger.info(f"   📍 Provincia: No configurada")
+    logger.info(f"   🆔 NIE: {nie}")
+    logger.info(f"   👤 Nombre: {nombre}")
+    logger.info(f"   🌍 País: No configurada")
+    logger.info(f"   📧 Email: {', '.join(mail_to) if mail_to else 'No configurado'}")
+    logger.info(f"   🧙 Stealth: {STEALTH_AVAILABLE}")
+    logger.info(f"   👁️ Headless: {os.getenv('REGISTRO_CITA_HEADLESS', 'true')}")
+    logger.info(f" 🌐 URL objetivo: {url}")
+    logger.info(f" 📧 Destinatarios: {mail_to}")
+    logger.info(f" 🆔 NIE a usar: {nie}")
+    logger.info(f" 👤 Nombre a usar: {nombre}")
+    logger.info(f" 🌍 País a usar: {pais}")
 
-        logger.info(f"🌐 URL objetivo: {url}")
-        
-        nie = (os.getenv("REGISTRO_CITA_NIE") or "").strip()
-        nombre = (os.getenv("REGISTRO_CITA_NOMBRE") or "").strip()
-        pais_value = (os.getenv("REGISTRO_CITA_PAIS_VALUE") or "248").strip()
-
-        if not nie or not nombre:
-            logger.warning(
-                "REGISTRO_CITA_NIE y REGISTRO_CITA_NOMBRE deben estar definidos en .env cuando hay URL."
-            )
-            return
-
-        mail_to_raw = (os.getenv("REGISTRO_CITA_MAIL_TO") or os.getenv("MAIL_ADMIN") or "").strip()
-        if not mail_to_raw:
-            logger.warning("REGISTRO_CITA_MAIL_TO ni MAIL_ADMIN: no hay destinatario de aviso.")
-            return
-        mail_to = [e.strip() for e in mail_to_raw.split(",") if e.strip()]
-        
-        logger.info(f"📧 Destinatarios: {mail_to}")
-        logger.info(f"🆔 NIE a usar: {nie}")
-        logger.info(f"👤 Nombre a usar: {nombre}")
-        logger.info(f"🌍 País a usar: {pais_value}")
-
-        headless = os.getenv("REGISTRO_CITA_HEADLESS", "true").lower() in ("1", "true", "yes")
-
-        # Render (y similares): sin esto Playwright sigue buscando en ~/.cache, fuera del slug.
-        if os.getenv("RENDER", "").strip().lower() in ("true", "1", "yes"):
-            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
-
+    # Función auxiliar para tomar screenshots con timestamp
+    def take_screenshot(page, description):
+        """Toma un screenshot con timestamp y lo añade a la lista"""
         try:
-            from playwright.sync_api import sync_playwright
-        except ImportError:
-            logger.error(
-                "Playwright no instalado. Ejecuta: pip install playwright && playwright install chromium"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"bot_cita_{execution_timestamp}_{description.replace(' ', '_').lower()}.png"
+            page.screenshot(path=filename, full_page=True)
+            screenshots_taken.append(filename)
+            logger.info(f"📸 Screenshot guardado: {filename}")
+            return filename
+        except Exception as e:
+            logger.warning(f"⚠️ Error tomando screenshot '{description}': {e}")
+            return None
+
+    state = _load_state()
+    hay_citas = False
+    sin_citas = False
+    page = None
+    diag_sent_before_nie = False
+
+    try:
+        with sync_playwright() as p:
+            # Detectar si estamos en producción (Render) o desarrollo
+            is_production = (
+                os.getenv("RENDER", "").lower() in ("true", "1") or 
+                os.getenv("ENVIRONMENT", "").lower() in ("production", "prod") or
+                os.getenv("PYTHONUNBUFFERED", "") == "1"  # Indicador de Render
             )
-            return
-
-        state = _load_state()
-        hay_citas = False
-        sin_citas = False
-        page = None
-        diag_sent_before_nie = False
-
-        try:
-            with sync_playwright() as p:
-                # Detectar si estamos en producción (Render) o desarrollo
-                is_production = (
-                    os.getenv("RENDER", "").lower() in ("true", "1") or 
-                    os.getenv("ENVIRONMENT", "").lower() in ("production", "prod") or
-                    os.getenv("PYTHONUNBUFFERED", "") == "1"  # Indicador de Render
+            
+            # Forzar headless en producción SIEMPRE
+            if is_production:
+                headless = True
+                logger.info("🏭 Producción detectada - Forzando modo headless")
+            else:
+                headless = os.getenv("REGISTRO_CITA_HEADLESS", "false").lower() in ("true", "1")
+                logger.info(f"👁️ Modo headless: {headless}")
+            
+            # Mostrar configuración
+            logger.info(f"🌍 Ambiente: {'Producción' if is_production else 'Desarrollo'}")
+            logger.info(f"🧙 Stealth: {STEALTH_AVAILABLE}")
+            
+            # Args comunes para Linux/Producción
+            launch_args = [
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-web-security",
+                "--disable-features=VizDisplayCompositor",
+                "--disable-background-networking",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--disable-client-side-phishing-detection",
+                "--disable-component-extensions-with-background-pages",
+                "--disable-default-apps",
+                "--disable-extensions",
+                "--disable-sync",
+                "--disable-translate",
+                "--metrics-recording-only",
+                "--no-first-run",
+                "--safebrowsing-disable-auto-update",
+                "--password-store=basic",
+                "--use-mock-keychain",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+                "--disable-setuid-sandbox",
+                "--disable-features=AudioServiceOutOfProcess",  # Reducir errores
+                "--disable-features=AudioContext",  # Reducir errores
+                "--disable-features=WebRTC",  # Reducir errores
+            ]
+            
+            # EN PRODUCCIÓN: Siempre usar navegador normal sin perfil
+            if is_production:
+                logger.info("🟡 Producción - Usando Playwright normal (sin perfil)")
+                browser = p.chromium.launch(
+                    headless=True,  # Siempre headless en producción
+                    args=launch_args
                 )
                 
-                # Forzar headless en producción SIEMPRE
-                if is_production:
-                    headless = True
-                    logger.info("🏭 Producción detectada - Forzando modo headless")
+                # Crear contexto realista
+                context = browser.new_context(
+                    locale="es-ES",
+                    timezone_id="Europe/Madrid",
+                    user_agent=_get_realistic_user_agent(),
+                    viewport={"width": 1366, "height": 768},
+                    device_scale_factor=1.0,
+                    is_mobile=False,
+                    has_touch=False,
+                    java_script_enabled=True,
+                    extra_http_headers={
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                        "Accept-Language": "es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3",
+                        "Accept-Encoding": "gzip, deflate, br",
+                        "DNT": "1",
+                        "Connection": "keep-alive",
+                        "Upgrade-Insecure-Requests": "1"
+                    },
+                    ignore_https_errors=os.getenv("REGISTRO_CITA_IGNORE_HTTPS_ERRORS", "").lower() in ("1", "true", "yes")
+                )
+                page = context.new_page()
+                
+                # Timeout extendido para producción
+                timeout_ms = max(180000, int(os.getenv("REGISTRO_CITA_TIMEOUT_MS", "180000")))  # Mínimo 3 minutos
+                page.set_default_timeout(timeout_ms)
+                goto_timeout = timeout_ms
+                
+                logger.info(f"⏱️ Timeout producción: {timeout_ms}ms ({timeout_ms/1000/60} minutos)")
+                
+            else:
+                # DESARROLLO: Usar navegador con perfil si está disponible
+                if STEALTH_AVAILABLE:
+                    logger.info("🟢 Desarrollo - Usando navegador REAL con sesión de Chrome")
+                    bot_profile_dir = os.getenv("CHROME_PROFILE_DIR", os.path.expanduser("~/AppData/Local/Google/Chrome/User Data/BotProfile"))
+                    
+                    browser = p.chromium.launch_persistent_context(
+                        user_data_dir=bot_profile_dir,
+                        headless=headless,
+                        args=launch_args
+                    )
+                    page = browser.new_page()
                 else:
-                    headless = os.getenv("REGISTRO_CITA_HEADLESS", "false").lower() in ("true", "1")
-                    logger.info(f"👁️ Modo headless: {headless}")
-                
-                # Mostrar configuración
-                logger.info(f"🌍 Ambiente: {'Producción' if is_production else 'Desarrollo'}")
-                logger.info(f"🧙 Stealth: {STEALTH_AVAILABLE}")
-                
-                # Args comunes para Linux/Producción
-                launch_args = [
-                    "--no-sandbox",
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-web-security",
-                    "--disable-features=VizDisplayCompositor",
-                    "--disable-background-networking",
-                    "--disable-background-timer-throttling",
-                    "--disable-backgrounding-occluded-windows",
-                    "--disable-renderer-backgrounding",
-                    "--disable-client-side-phishing-detection",
-                    "--disable-component-extensions-with-background-pages",
-                    "--disable-default-apps",
-                    "--disable-extensions",
-                    "--disable-sync",
-                    "--disable-translate",
-                    "--metrics-recording-only",
-                    "--no-first-run",
-                    "--safebrowsing-disable-auto-update",
-                    "--password-store=basic",
-                    "--use-mock-keychain",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                    "--disable-software-rasterizer",
-                    "--disable-setuid-sandbox",
-                    "--disable-features=AudioServiceOutOfProcess",  # Reducir errores
-                    "--disable-features=AudioContext",  # Reducir errores
-                    "--disable-features=WebRTC",  # Reducir errores
-                ]
-                
-                # EN PRODUCCIÓN: Siempre usar navegador normal sin perfil
-                if is_production:
-                    logger.info("🟡 Producción - Usando Playwright normal (sin perfil)")
+                    logger.info("🟡 Desarrollo - Usando Playwright normal (sin sesión real)")
                     browser = p.chromium.launch(
-                        headless=True,  # Siempre headless en producción
+                        headless=headless,
                         args=launch_args
                     )
                     
-                    # Crear contexto realista
                     context = browser.new_context(
                         locale="es-ES",
                         timezone_id="Europe/Madrid",
@@ -731,77 +871,55 @@ def registro_cita(self):
                         ignore_https_errors=os.getenv("REGISTRO_CITA_IGNORE_HTTPS_ERRORS", "").lower() in ("1", "true", "yes")
                     )
                     page = context.new_page()
-                    
-                    # Timeout extendido para producción
-                    timeout_ms = max(180000, int(os.getenv("REGISTRO_CITA_TIMEOUT_MS", "180000")))  # Mínimo 3 minutos
-                    page.set_default_timeout(timeout_ms)
-                    goto_timeout = timeout_ms
-                    
-                    logger.info(f"⏱️ Timeout producción: {timeout_ms}ms ({timeout_ms/1000/60} minutos)")
-                    
-                else:
-                    # DESARROLLO: Usar navegador con perfil si está disponible
-                    if STEALTH_AVAILABLE:
-                        logger.info("🟢 Desarrollo - Usando navegador REAL con sesión de Chrome")
-                        bot_profile_dir = os.getenv("CHROME_PROFILE_DIR", os.path.expanduser("~/AppData/Local/Google/Chrome/User Data/BotProfile"))
-                        
-                        browser = p.chromium.launch_persistent_context(
-                            user_data_dir=bot_profile_dir,
-                            headless=headless,
-                            args=launch_args
-                        )
-                        page = browser.new_page()
-                    else:
-                        logger.info("🟡 Desarrollo - Usando Playwright normal (sin sesión real)")
-                        browser = p.chromium.launch(
-                            headless=headless,
-                            args=launch_args
-                        )
-                        
-                        context = browser.new_context(
-                            locale="es-ES",
-                            timezone_id="Europe/Madrid",
-                            user_agent=_get_realistic_user_agent(),
-                            viewport={"width": 1366, "height": 768},
-                            device_scale_factor=1.0,
-                            is_mobile=False,
-                            has_touch=False,
-                            java_script_enabled=True,
-                            extra_http_headers={
-                                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                                "Accept-Language": "es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3",
-                                "Accept-Encoding": "gzip, deflate, br",
-                                "DNT": "1",
-                                "Connection": "keep-alive",
-                                "Upgrade-Insecure-Requests": "1"
-                            },
-                            ignore_https_errors=os.getenv("REGISTRO_CITA_IGNORE_HTTPS_ERRORS", "").lower() in ("1", "true", "yes")
-                        )
-                        page = context.new_page()
                 
-                # Aplicar técnicas de stealth
-                _apply_stealth(page)
-                
-                # Simular comportamiento humano inicial
-                _human_delay(2, 4)
-                _simulate_mouse_movement(page)
-                
+                # Timeout normal para desarrollo
                 timeout_ms = int(os.getenv("REGISTRO_CITA_TIMEOUT_MS", "90000"))
                 page.set_default_timeout(timeout_ms)
                 goto_timeout = _goto_timeout_ms(timeout_ms)
-                
-                # Navegación con espera realista (CLAVE)
-                _human_delay(3, 6)  # Espera más larga para evitar detección
-                logger.info(f"🌐 Navegando a: {url}")
-                _page_goto_resilient(page, url, _goto_wait_until(), goto_timeout)
-                logger.info("✅ Navegación completada")
-                
-                # 👈 ESPERA REAL CLAVE - Dejar que cargue completamente
-                logger.info("⏳ Espera real de 10 segundos para carga completa...")
-                time.sleep(10)  # Aumentado a 10 segundos
-                logger.info("✅ Espera de carga completada")
-                
-                # Espera adicional aleatoria para simular comportamiento humano
+            
+            # Aplicar técnicas de stealth
+            _apply_stealth(page)
+            
+            # Simular comportamiento humano inicial
+            _human_delay(2, 4)
+            _simulate_mouse_movement(page)
+            
+            # Tomar screenshot inicial
+            take_screenshot(page, "inicio_navegacion")
+            
+            # Navegación con espera realista (CLAVE)
+            _human_delay(3, 6)  # Espera más larga para evitar detección
+            logger.info(f"🌐 Navegando a: {url}")
+            _page_goto_resilient(page, url, _goto_wait_until(), goto_timeout)
+            logger.info("✅ Navegación completada")
+            
+            # Tomar screenshot después de navegación
+            take_screenshot(page, "pagina_cargada")
+            
+            # Simular comportamiento humano post-navegación
+            _human_delay(3, 5)
+            _simulate_mouse_movement(page)
+            
+            # 👈 ESPERA REAL CLAVE - Dejar que cargue completamente
+            logger.info("⏳ Espera real de 10 segundos para carga completa...")
+            time.sleep(10)  # Aumentado a 10 segundos
+            logger.info("✅ Espera de carga completada")
+            
+            # Espera adicional aleatoria para simular comportamiento humano
+            espera_extra = random.randint(5, 15)
+            logger.info(f"🕰️ Espera adicional aleatoria: {espera_extra} segundos")
+            time.sleep(espera_extra)
+            
+            _human_delay(3, 6)  # Espera más larga
+            _simulate_mouse_movement(page)
+            
+            # 🧪 DEBUG: Screenshot para ver qué página carga realmente
+            try:
+                screenshot_path = "debug_cita_bot.png"
+                page.screenshot(path=screenshot_path, full_page=True)
+                logger.info(f"📸 Screenshot guardado en: {screenshot_path}")
+            except Exception as e:
+                logger.warning(f"No se pudo guardar screenshot: {e}")
                 espera_extra = random.randint(5, 15)
                 logger.info(f"🕰️ Espera adicional aleatoria: {espera_extra} segundos")
                 time.sleep(espera_extra)
