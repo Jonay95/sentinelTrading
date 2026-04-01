@@ -82,6 +82,21 @@ services:
         sync: false
       - key: REGISTRO_CITA_MAIL_TO
         sync: false
+      # Mismas variables que en sentinel-trading-api; sin ellas el worker no puede enviar informes.
+      - key: MAIL_SERVER
+        sync: false
+      - key: MAIL_PORT
+        sync: false
+      - key: MAIL_USE_TLS
+        sync: false
+      - key: MAIL_USE_SSL
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_DEFAULT_SENDER
+        sync: false
       - key: CELERY_BROKER_URL
         fromService:
           name: sentinel-celery-redis

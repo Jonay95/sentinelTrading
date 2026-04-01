@@ -41,6 +41,20 @@ _PAIS_VALUE_ALIASES: dict[str, str] = {
 }
 
 
+def _missing_smtp_mail_config(app) -> list[str]:
+    """
+    Mínimo para intentar SMTP con flask-mailman (create_app carga Config desde os.environ).
+    Gmail/SendGrid/etc. suelen exigir además MAIL_USERNAME y MAIL_PASSWORD.
+    """
+    cfg = app.config
+    missing: list[str] = []
+    if not (str(cfg.get("MAIL_SERVER") or "").strip()):
+        missing.append("MAIL_SERVER")
+    if not (str(cfg.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER") or "").strip()):
+        missing.append("MAIL_DEFAULT_SENDER")
+    return missing
+
+
 def _pais_select_kwargs(raw: Optional[str]) -> tuple[Optional[dict[str, str]], str]:
     """
     Devuelve kwargs para locator.select_option(..., force=ff) y un texto para logs.
@@ -573,6 +587,14 @@ def _send_diagnostic_mail(
     body: str,
 ) -> None:
     with app.app_context():
+        miss = _missing_smtp_mail_config(app)
+        if miss:
+            logger.warning(
+                "No se envía diagnóstico: faltan variables de correo en ESTE proceso: %s. "
+                "En Render, el Celery worker no hereda el .env del API: copia MAIL_* al worker.",
+                ", ".join(miss),
+            )
+            return
         sender = app.config.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
         if not sender:
             logger.warning("MAIL_DEFAULT_SENDER no configurado; no se envía diagnóstico.")
@@ -605,6 +627,15 @@ def _send_execution_report_mail(
     from datetime import datetime
 
     with app.app_context():
+        miss = _missing_smtp_mail_config(app)
+        if miss:
+            logger.warning(
+                "No se envía reporte de ejecución: faltan variables en el worker/servicio: %s. "
+                "Replica MAIL_SERVER, MAIL_PORT, MAIL_USE_TLS, MAIL_USERNAME, MAIL_PASSWORD, "
+                "MAIL_DEFAULT_SENDER (mismos valores que en el API).",
+                ", ".join(miss),
+            )
+            return
         sender = app.config.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
         if not sender:
             logger.warning("MAIL_DEFAULT_SENDER no configurado; no se envía reporte de ejecución.")
@@ -685,6 +716,12 @@ def _send_execution_report_mail(
 
 def _send_aviso_mail(app, url: str, mail_to: list[str]) -> None:
     with app.app_context():
+        miss = _missing_smtp_mail_config(app)
+        if miss:
+            logger.warning(
+                "No se envía aviso de citas: faltan variables de correo: %s", ", ".join(miss)
+            )
+            return
         sender = app.config.get("MAIL_DEFAULT_SENDER") or os.getenv("MAIL_DEFAULT_SENDER")
         if not sender:
             logger.warning("MAIL_DEFAULT_SENDER no configurado; no se envía el aviso.")
@@ -726,6 +763,14 @@ def registro_cita(self) -> bool:
 
     # self.app es la instancia Celery; el correo y config requieren la app Flask
     flask_app = create_app()
+    mail_miss = _missing_smtp_mail_config(flask_app)
+    if mail_miss:
+        logger.warning(
+            "📧 Correo no configurado en este proceso (%s). Los informes y avisos no se enviarán "
+            "hasta que definas las mismas variables MAIL_* aquí que en el API. "
+            "Render: Environment del servicio «Celery worker», no solo del web.",
+            ", ".join(mail_miss),
+        )
     url = os.getenv("REGISTRO_CITA_URL")
     if not url:
         logger.error("REGISTRO_CITA_URL no configurada")
@@ -772,7 +817,12 @@ def registro_cita(self) -> bool:
             filename = f"bot_cita_{execution_timestamp}_{description.replace(' ', '_').lower()}.png"
             page.screenshot(path=filename, full_page=True)
             screenshots_taken.append(filename)
-            logger.info(f"📸 Screenshot guardado: {filename}")
+            abs_path = os.path.abspath(filename)
+            logger.info(
+                "📸 Screenshot guardado: %s (ruta absoluta en el worker: %s; en Render no es visible en el dashboard)",
+                filename,
+                abs_path,
+            )
             return filename
         except Exception as e:
             logger.warning(f"⚠️ Error tomando screenshot '{description}': {e}")
