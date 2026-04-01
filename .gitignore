@@ -8,3 +8,19 @@ frontend/dist/
 *.pyc
 .DS_Store
 /backend/venv
+
+# Screenshots y archivos temporales
+*.png
+*.jpg
+*.jpeg
+debug_*
+conservador_*
+button_search*
+
+# Logs temporales
+*.log
+logs/
+
+# Archivos de test temporales
+test_*.py
+temp_*.py

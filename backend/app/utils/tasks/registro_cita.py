@@ -52,35 +52,71 @@ def _simulate_mouse_movement(page) -> None:
 
 
 def _apply_stealth(page) -> None:
-    """Aplica técnicas de stealth para evitar detección."""
-    try:
-        if STEALTH_AVAILABLE:
-            logger.info("🛡️ Aplicando playwright-stealth...")
+    """
+    Aplica técnicas avanzadas de stealth para evadir detección.
+    """
+    if STEALTH_AVAILABLE:
+        logger.info("🛡️ Aplicando playwright-stealth...")
+        try:
             stealth_obj = Stealth()
-            stealth_obj.apply_stealth_sync(page)  # 👈 CORREGIDO: apply_stealth_sync
+            stealth_obj.apply(page)
             logger.info("✅ playwright-stealth aplicado correctamente")
-        else:
-            logger.error("❌ playwright-stealth no disponible - ALTAMENTE RECOMENDADO INSTALAR")
-            logger.error("💣 Sin stealth → fácilmente detectable por antibots")
-            # Técnicas manuales de stealth (fallback)
-            logger.warning("🔧 Aplicando técnicas manuales de stealth (menos efectivas)")
-            page.add_init_script("""
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined,
-                });
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3, 4, 5],
-                });
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['es-ES', 'es', 'en'],
-                });
-                Object.defineProperty(navigator, 'platform', {
-                    get: () => 'Win32',
-                });
-                window.chrome = {
-                    runtime: {},
-                };
-            """)
+        except Exception as e:
+            logger.warning(f"⚠️ Error aplicando stealth: {e}")
+    else:
+        logger.warning("⚠️ playwright-stealth no disponible - usando técnicas manuales")
+    
+    # Técnicas manuales adicionales
+    try:
+        # Ocultar propiedades de automatización
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+            });
+            
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+            
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['es-ES', 'es', 'en'],
+            });
+            
+            Object.defineProperty(navigator, 'platform', {
+                get: () => 'Win32',
+            });
+            
+            window.chrome = {
+                runtime: {},
+            };
+            
+            Object.defineProperty(navigator, 'permissions', {
+                get: () => ({
+                    query: () => Promise.resolve({ state: 'granted' }),
+                }),
+            });
+        """)
+        
+        # Simular fingerprint más realista
+        page.evaluate("""
+            // Evitar detección de headless
+            Object.defineProperty(navigator, 'hardwareConcurrency', {
+                get: () => 4,
+            });
+            
+            // Simular device memory
+            Object.defineProperty(navigator, 'deviceMemory', {
+                get: () => 8,
+            });
+            
+            // Ocultar atributos de automatización
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
+        """)
+        
+        logger.info("✅ Técnicas stealth manuales aplicadas")
+        
     except Exception as e:
         logger.error(f"❌ Error aplicando stealth: {e}")
         logger.error("💣 Esto puede causar detección inmediata")
@@ -344,7 +380,15 @@ def _maybe_run_icpplus_wizard(page, timeout_ms: int, ff: bool) -> None:
         os.getenv("REGISTRO_CITA_SEL_TRAMITE") or 'select[name="tramiteGrupo[0]"]'
     ).strip()
     tram_sel = page.locator(tram_css).first
-    tram_sel.wait_for(state="attached", timeout=timeout_ms)
+    
+    # Intentar esperar al selector del trámite con timeout más corto
+    try:
+        tram_sel.wait_for(state="attached", timeout=10000)  # 10 segundos máximo
+        logger.info("✅ Selector de trámite encontrado")
+    except Exception:
+        logger.warning("🔍 Selector de trámite no encontrado - continuando sin wizard...")
+        logger.info("✅ Saltando trámite - continuando al formulario directamente")
+        return
 
     tram_val = (os.getenv("REGISTRO_CITA_TRAMITE") or "4010").strip()
     _prepare_locator_attached(tram_sel, min(20000, timeout_ms))
@@ -536,11 +580,23 @@ def registro_cita(self):
 
     app = create_app()
     with app.app_context():
+        logger.info("🚀 INICIO DE TAREA registro_cita - Bot de Citas")
+        logger.info("📋 Configuración:")
+        logger.info(f"   📍 Provincia: {os.getenv('REGISTRO_CITA_PROVINCIA', 'No configurada')}")
+        logger.info(f"   🆔 NIE: {os.getenv('REGISTRO_CITA_NIE', 'No configurado')}")
+        logger.info(f"   👤 Nombre: {os.getenv('REGISTRO_CITA_NOMBRE', 'No configurado')}")
+        logger.info(f"   🌍 País: {os.getenv('REGISTRO_CITA_PAIS', 'No configurado')}")
+        logger.info(f"   📧 Email: {os.getenv('REGISTRO_CITA_MAIL_TO', 'No configurado')}")
+        logger.info(f"   🧙 Stealth: {os.getenv('REGISTRO_CITA_STEALTH', 'false')}")
+        logger.info(f"   👁️ Headless: {os.getenv('REGISTRO_CITA_HEADLESS', 'true')}")
+        
         url = (os.getenv("REGISTRO_CITA_URL") or "").strip()
         if not url:
             logger.debug("REGISTRO_CITA_URL vacía; se omite la tarea registro_cita.")
             return
 
+        logger.info(f"🌐 URL objetivo: {url}")
+        
         nie = (os.getenv("REGISTRO_CITA_NIE") or "").strip()
         nombre = (os.getenv("REGISTRO_CITA_NOMBRE") or "").strip()
         pais_value = (os.getenv("REGISTRO_CITA_PAIS_VALUE") or "248").strip()
@@ -556,6 +612,11 @@ def registro_cita(self):
             logger.warning("REGISTRO_CITA_MAIL_TO ni MAIL_ADMIN: no hay destinatario de aviso.")
             return
         mail_to = [e.strip() for e in mail_to_raw.split(",") if e.strip()]
+        
+        logger.info(f"📧 Destinatarios: {mail_to}")
+        logger.info(f"🆔 NIE a usar: {nie}")
+        logger.info(f"👤 Nombre a usar: {nombre}")
+        logger.info(f"🌍 País a usar: {pais_value}")
 
         headless = os.getenv("REGISTRO_CITA_HEADLESS", "true").lower() in ("1", "true", "yes")
 
@@ -710,15 +771,22 @@ def registro_cita(self):
                 goto_timeout = _goto_timeout_ms(timeout_ms)
                 
                 # Navegación con espera realista (CLAVE)
-                _human_delay(1, 3)
+                _human_delay(3, 6)  # Espera más larga para evitar detección
                 logger.info(f"🌐 Navegando a: {url}")
                 _page_goto_resilient(page, url, _goto_wait_until(), goto_timeout)
+                logger.info("✅ Navegación completada")
                 
                 # 👈 ESPERA REAL CLAVE - Dejar que cargue completamente
-                logger.info("⏳ Espera real de 5 segundos para carga completa...")
-                time.sleep(5)
+                logger.info("⏳ Espera real de 10 segundos para carga completa...")
+                time.sleep(10)  # Aumentado a 10 segundos
+                logger.info("✅ Espera de carga completada")
                 
-                _human_delay(2, 4)
+                # Espera adicional aleatoria para simular comportamiento humano
+                espera_extra = random.randint(5, 15)
+                logger.info(f"🕰️ Espera adicional aleatoria: {espera_extra} segundos")
+                time.sleep(espera_extra)
+                
+                _human_delay(3, 6)  # Espera más larga
                 _simulate_mouse_movement(page)
                 
                 # 🧪 DEBUG: Screenshot para ver qué página carga realmente
@@ -752,8 +820,11 @@ def registro_cita(self):
                     browser.close()
                     return
 
+                logger.info("🔍 Verificando bloqueos de red... OK")
+                logger.info("🎯 Ejecutando wizard de trámites...")
                 ff = _fill_force()
                 _maybe_run_icpplus_wizard(page, timeout_ms, ff)
+                logger.info("✅ Wizard completado")
 
                 ready_raw = os.getenv("REGISTRO_CITA_PAGE_READY_SELECTOR")
                 ready_sel = (
@@ -768,6 +839,7 @@ def registro_cita(self):
                             state="attached",
                             timeout=min(45000, timeout_ms),
                         )
+                        logger.info(f"✅ Selector de página lista encontrado: {ready_sel}")
                     except Exception:
                         logger.warning(
                             "No apareció a tiempo el selector de página lista (%s); se sigue igualmente.",
@@ -788,17 +860,21 @@ def registro_cita(self):
                     )
                     diag_sent_before_nie = True
 
+                logger.info("🔍 Buscando formulario de NIE...")
                 root = _resolve_form_root(page, sel_nie, timeout_ms)
+                logger.info("✅ Formulario encontrado")
                 
                 # Simular comportamiento humano al rellenar formulario
                 _human_delay(1, 3)
                 _simulate_mouse_movement(page)
                 
+                logger.info("📝 Rellenando formulario...")
                 # Rellenar NIE con typing humano
                 nie_input = root.locator(sel_nie).first
                 nie_input.click()
                 _human_delay(0.5, 1.5)
                 nie_input.fill(nie, force=ff)
+                logger.info(f"✅ NIE rellenado: {nie}")
                 _human_delay(1, 2)
                 
                 # Rellenar nombre con typing humano
@@ -807,6 +883,7 @@ def registro_cita(self):
                 nom_input.click()
                 _human_delay(0.5, 1.5)
                 nom_input.fill(nombre, force=ff)
+                logger.info(f"✅ Nombre rellenado: {nombre}")
                 _human_delay(1, 2)
                 
                 # Seleccionar país
@@ -815,25 +892,100 @@ def registro_cita(self):
                 pais_input.click()
                 _human_delay(0.5, 1.5)
                 pais_input.select_option(pais_value, force=ff)
+                logger.info(f"✅ País seleccionado: {pais_value}")
                 _human_delay(1, 2)
 
-                # Click en Aceptar con delay humano
-                _simulate_mouse_movement(page)
-                _human_delay(1, 3)
-                _get_by_role_click(root, page, "Aceptar", timeout_ms)
-                _human_delay(2, 4)
-                
-                # Click en Solicitar Cita con delay humano (si existe)
+                logger.info("🖱️ Haciendo clic en botones...")
+                # Buscar y hacer clic en botón "Solicitar Cita" primero
                 _simulate_mouse_movement(page)
                 _human_delay(1, 3)
                 try:
-                    _get_by_role_click(root, page, "Solicitar Cita", timeout_ms)
+                    logger.info("🔘 Buscando botón 'Solicitar Cita'...")
+                    # Intentar diferentes selectores para "Solicitar Cita"
+                    solicitando_selectors = [
+                        'button:has-text("Solicitar Cita")',
+                        'input[value="Solicitar Cita"]',
+                        'a:has-text("Solicitar Cita")',
+                        '[role="button"]:has-text("Solicitar Cita")',
+                        '#btnSolicitar',
+                        '.btn-solicitar'
+                    ]
+                    
+                    boton_encontrado = False
+                    for selector in solicitando_selectors:
+                        try:
+                            element = page.query_selector(selector)
+                            if element:
+                                element.click()
+                                logger.info(f"✅ Botón 'Solicitar Cita' clicado con selector: {selector}")
+                                boton_encontrado = True
+                                break
+                        except Exception:
+                            continue
+                    
+                    if not boton_encontrado:
+                        logger.warning("🔍 Botón 'Solicitar Cita' no encontrado con ningún selector")
+                    
                     _human_delay(2, 4)
-                except Exception:
-                    logger.warning("🔍 Botón 'Solicitar Cita' no encontrado, continuando...")
-                    logger.info("✅ Proceso completado hasta donde fue posible")
+                except Exception as e:
+                    logger.warning(f"❌ Error buscando 'Solicitar Cita': {e}")
+                
+                # Buscar y hacer clic en botón "Aceptar" (btnEnviar)
+                _simulate_mouse_movement(page)
+                _human_delay(1, 3)
+                try:
+                    logger.info("🔘 Buscando botón 'Aceptar' (btnEnviar)...")
+                    # Intentar diferentes selectores para "Aceptar"
+                    aceptar_selectors = [
+                        '#btnEnviar',
+                        'input#btnEnviar[type="button"]',
+                        'input[value="Aceptar"]',
+                        'button:has-text("Aceptar")',
+                        '.mf-button.primary',
+                        'input.mf-button.primary'
+                    ]
+                    
+                    boton_aceptar_encontrado = False
+                    for selector in aceptar_selectors:
+                        try:
+                            element = page.query_selector(selector)
+                            if element:
+                                element.click()
+                                logger.info(f"✅ Botón 'Aceptar' clicado con selector: {selector}")
+                                boton_aceptar_encontrado = True
+                                break
+                        except Exception:
+                            continue
+                    
+                    if not boton_aceptar_encontrado:
+                        logger.warning("🔍 Botón 'Aceptar' no encontrado con ningún selector")
+                    
+                    _human_delay(2, 4)
+                except Exception as e:
+                    logger.warning(f"❌ Error buscando 'Aceptar': {e}")
+                
+                # Si no se encontró ningún botón, intentar hacer clic por rol
+                if not boton_encontrado and not boton_aceptar_encontrado:
+                    logger.info("� Intentando clic por rol como fallback...")
+                    try:
+                        _get_by_role_click(root, page, "Aceptar", timeout_ms)
+                        logger.info("✅ Botón 'Aceptar' clicado por rol")
+                    except Exception:
+                        try:
+                            _get_by_role_click(root, page, "Solicitar Cita", timeout_ms)
+                            logger.info("✅ Botón 'Solicitar Cita' clicado por rol")
+                        except Exception:
+                            logger.warning("🔍 No se pudo hacer clic en ningún botón")
+                            logger.info("✅ Proceso completado hasta donde fue posible")
 
-                hay_citas, sin_citas = _detect_result(page)
+                logger.info("🔍 Detectando resultados...")
+                try:
+                    hay_citas, sin_citas = _detect_result(page)
+                    logger.info(f"📊 Resultado detección: hay_citas={hay_citas}, sin_citas={sin_citas}")
+                except Exception as e:
+                    logger.warning(f"❌ Error en detección de resultados: {e}")
+                    logger.info("🤷 RESULTADO: Error en detección - asumiendo que no hay citas")
+                    hay_citas, sin_citas = False, True
                 
                 # 🧪 DEBUG: Screenshot final del resultado
                 try:
@@ -903,15 +1055,20 @@ def registro_cita(self):
             raise
 
         if sin_citas:
+            logger.info("📋 RESULTADO: Sin citas disponibles")
+            logger.info("� No hay citas - continuando monitoreo...")
             state["already_notified"] = False
             _save_state(state)
-            logger.info("Cita previa: sin citas disponibles (mensaje informativo).")
-            return
+            logger.info("Cita previa: sin citas disponibles (continuando monitoreo).")
+            return False
 
         if hay_citas:
+            logger.info("🎉 RESULTADO: ¡CITAS DISPONIBLES!")
             if not state.get("already_notified"):
+                logger.info("📧 Enviando email de aviso de citas disponibles...")
                 try:
                     _send_aviso_mail(app, url, mail_to)
+                    logger.info("✅ Email de aviso enviado correctamente")
                 except Exception:
                     logger.exception("Error al enviar correo de aviso de cita previa.")
                     return
@@ -920,9 +1077,10 @@ def registro_cita(self):
                 logger.info("Cita previa: aviso por correo enviado (citas detectadas).")
             else:
                 logger.debug("Cita previa: citas disponibles; aviso ya enviado previamente.")
-            return
+            return True
 
         logger.warning(
             "Cita previa: resultado ambiguo (ni selector de sede ni mensaje sin citas)."
         )
-        return False  # 👈 Añadir return False por defecto
+        logger.info("🤷 RESULTADO: Ambiguo - no se pudo determinar si hay citas o no")
+        return False
