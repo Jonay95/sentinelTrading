@@ -254,32 +254,45 @@ def _log_goto_timeout_diagnosis(page_url: str) -> None:
     )
 
 
-def _page_goto_resilient(page, url: str, wait_until: str, goto_timeout: int) -> None:
-    try:
-        page.goto(url, wait_until=wait_until, timeout=goto_timeout)
-        return
-    except Exception as e:
-        ename = type(e).__name__
-        emsg = str(e).lower()
-        if "timeout" not in ename.lower() and "timeout" not in emsg:
-            raise
-        if wait_until != "commit":
-            logger.warning(
-                "registro_cita: timeout en goto (wait_until=%s); reintento con commit.",
-                wait_until,
+def _page_goto_resilient(page: Page, url: str, wait_until: str, timeout_ms: int) -> None:
+    """
+    Navegación resiliente con reintentos y timeout extendido para producción.
+    """
+    logger.info(f"🌐 Navegando a: {url}")
+    
+    # Configurar reintentos para producción
+    max_retries = 3 if os.getenv("RENDER", "").lower() in ("true", "1") else 2
+    
+    for attempt in range(max_retries):
+        try:
+            if attempt > 0:
+                logger.info(f"🔄 Reintento {attempt + 1}/{max_retries}...")
+                wait_until = "commit"  # Más rápido en reintentos
+                timeout = min(60000, timeout_ms)  # 1 minuto máximo en reintentos
+            else:
+                timeout = timeout_ms
+                logger.info(f"⏱️ Timeout navegación: {timeout}ms ({timeout/1000} segundos)")
+            
+            page.goto(
+                url,
+                wait_until=wait_until,
+                timeout=timeout,
             )
-            try:
-                page.goto(
-                    url,
-                    wait_until="commit",
-                    timeout=min(120_000, goto_timeout),
-                )
-                return
-            except Exception:
-                _log_goto_timeout_diagnosis(url)
-                raise
-        _log_goto_timeout_diagnosis(url)
-        raise
+            logger.info("✅ Navegación completada")
+            return
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error navegación (intento {attempt + 1}): {e}")
+            
+            if attempt == max_retries - 1:
+                # Último intento falló
+                logger.error("❌ Todos los reintentos de navegación fallaron")
+                raise e
+            
+            # Esperar antes de reintentar
+            wait_time = (attempt + 1) * 5  # 5s, 10s, 15s
+            logger.info(f"⏳ Esperando {wait_time}s antes de reintentar...")
+            page.wait_for_timeout(wait_time * 1000)
 
 
 def _resolve_form_root(page, nie_selector: str, timeout_ms: int) -> RootLike:
@@ -718,6 +731,13 @@ def registro_cita(self):
                         ignore_https_errors=os.getenv("REGISTRO_CITA_IGNORE_HTTPS_ERRORS", "").lower() in ("1", "true", "yes")
                     )
                     page = context.new_page()
+                    
+                    # Timeout extendido para producción
+                    timeout_ms = max(180000, int(os.getenv("REGISTRO_CITA_TIMEOUT_MS", "180000")))  # Mínimo 3 minutos
+                    page.set_default_timeout(timeout_ms)
+                    goto_timeout = timeout_ms
+                    
+                    logger.info(f"⏱️ Timeout producción: {timeout_ms}ms ({timeout_ms/1000/60} minutos)")
                     
                 else:
                     # DESARROLLO: Usar navegador con perfil si está disponible
