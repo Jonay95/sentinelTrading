@@ -32,6 +32,32 @@ RootLike = Any
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 STATE_FILE = PROJECT_ROOT / "instance" / "registro_cita_state.json"
 
+# txtPaisNac: el valor del <option value="…"> en la sede (no el texto mostrado).
+# REGISTRO_CITA_PAIS puede ser ese código o un alias (p. ej. venezuela → 248).
+_PAIS_VALUE_ALIASES: dict[str, str] = {
+    "venezuela": "248",
+    "vzla": "248",
+    "ve": "248",
+}
+
+
+def _pais_select_kwargs(raw: Optional[str]) -> tuple[Optional[dict[str, str]], str]:
+    """
+    Devuelve kwargs para locator.select_option(..., force=ff) y un texto para logs.
+    Si falta país, (None, "").
+    """
+    if raw is None or not str(raw).strip():
+        return None, ""
+    s = str(raw).strip()
+    if s.isdigit():
+        return {"value": s}, f"value={s}"
+    key = s.lower().replace(" ", "_")
+    if key in _PAIS_VALUE_ALIASES:
+        v = _PAIS_VALUE_ALIASES[key]
+        return {"value": v}, f"value={v} ({s!r} → Venezuela)"
+    # Coincidir con el texto del <option> en la sede (p. ej. VENEZUELA)
+    return {"label": s.upper()}, f"label={s.upper()}"
+
 
 def _human_delay(min_seconds: float = 2.0, max_seconds: float = 5.0) -> None:
     """Añade un delay aleatorio para simular comportamiento humano."""
@@ -711,17 +737,24 @@ def registro_cita(self) -> bool:
     
     nie = os.getenv("REGISTRO_CITA_NIE")
     nombre = os.getenv("REGISTRO_CITA_NOMBRE")
-    pais = os.getenv("REGISTRO_CITA_PAIS")
-    
+    pais_raw = os.getenv("REGISTRO_CITA_PAIS")
+    pais_kw, pais_resolved = _pais_select_kwargs(pais_raw)
+    if not pais_kw:
+        logger.error(
+            "REGISTRO_CITA_PAIS obligatorio: código del <select> (p. ej. 248 para Venezuela) "
+            "o texto venezuela / VENEZUELA."
+        )
+        return False
+
     # Lista para almacenar paths de screenshots
     screenshots_taken = []
-    
+
     logger.info("🚀 INICIO DE TAREA registro_cita - Bot de Citas")
     logger.info("📋 Configuración:")
     logger.info(f"   📍 Provincia: No configurada")
     logger.info(f"   🆔 NIE: {nie}")
     logger.info(f"   👤 Nombre: {nombre}")
-    logger.info(f"   🌍 País: No configurada")
+    logger.info(f"   🌍 País: {pais_raw!r} → {pais_resolved}")
     logger.info(f"   📧 Email: {', '.join(mail_to) if mail_to else 'No configurado'}")
     logger.info(f"   🧙 Stealth: {STEALTH_AVAILABLE}")
     logger.info(f"   👁️ Headless: {os.getenv('REGISTRO_CITA_HEADLESS', 'true')}")
@@ -729,7 +762,7 @@ def registro_cita(self) -> bool:
     logger.info(f" 📧 Destinatarios: {mail_to}")
     logger.info(f" 🆔 NIE a usar: {nie}")
     logger.info(f" 👤 Nombre a usar: {nombre}")
-    logger.info(f" 🌍 País a usar: {pais}")
+    logger.info(f" 🌍 País a usar: {pais_resolved}")
 
     # Función auxiliar para tomar screenshots con timestamp
     def take_screenshot(page, description):
@@ -1053,8 +1086,8 @@ def registro_cita(self) -> bool:
             _simulate_mouse_movement(page)
             pais_input.click()
             _human_delay(0.5, 1.5)
-            pais_input.select_option(pais, force=ff)
-            logger.info(f"✅ País seleccionado: {pais}")
+            pais_input.select_option(force=ff, **pais_kw)
+            logger.info(f"✅ País seleccionado ({pais_resolved})")
             _human_delay(1, 2)
 
             # Tomar screenshot del formulario completo
