@@ -914,63 +914,61 @@ def registro_cita(self) -> bool:
             _simulate_mouse_movement(page)
             
             # 🧪 DEBUG: Screenshot para ver qué página carga realmente
-            try:
-                screenshot_path = "debug_cita_bot.png"
-                page.screenshot(path=screenshot_path, full_page=True)
-                logger.info(f"📸 Screenshot guardado en: {screenshot_path}")
-            except Exception as e:
-                logger.warning(f"No se pudo guardar screenshot: {e}")
-                espera_extra = random.randint(5, 15)
-                logger.info(f"🕰️ Espera adicional aleatoria: {espera_extra} segundos")
-                time.sleep(espera_extra)
-                
-                _human_delay(3, 6)  # Espera más larga
-                _simulate_mouse_movement(page)
-                
-                # 🧪 DEBUG: Screenshot para ver qué página carga realmente
-                try:
-                    screenshot_path = "debug_cita_bot.png"
-                    page.screenshot(path=screenshot_path, full_page=True)
-                    logger.info(f"📸 Screenshot guardado en: {screenshot_path}")
-                except Exception as e:
-                    logger.warning(f"No se pudo guardar screenshot: {e}")
+            take_screenshot(page, "antes_de_formulario")
+            
+            # 👈 ESPERA REAL CLAVE - Dejar que cargue completamente
+            logger.info("⏳ Espera real de 10 segundos para carga completa...")
+            time.sleep(10)  # Aumentado a 10 segundos
+            logger.info("✅ Espera de carga completada")
+            
+            # Espera adicional aleatoria para simular comportamiento humano
+            espera_extra = random.randint(5, 15)
+            logger.info(f"🕰️ Espera adicional aleatoria: {espera_extra} segundos")
+            time.sleep(espera_extra)
+            
+            _human_delay(3, 6)  # Espera más larga
+            _simulate_mouse_movement(page)
+            
+            # Tomar screenshot después de esperar
+            take_screenshot(page, "despues_de_espera")
+            
+            # Espera extra configurada
+            extra_wait = int(os.getenv("REGISTRO_CITA_POST_GOTO_MS", "0") or "0")
+            if extra_wait > 0:
+                page.wait_for_timeout(min(extra_wait, 60000))
 
-                extra_wait = int(os.getenv("REGISTRO_CITA_POST_GOTO_MS", "0") or "0")
-                if extra_wait > 0:
-                    page.wait_for_timeout(min(extra_wait, 60000))
-
-                perimeter = _detect_perimeter_block(page)
-                if perimeter:
-                    logger.error(
-                        "registro_cita: el servidor no llega al portal de citas (bloqueo de red). %s URL=%s",
-                        perimeter,
-                        page.url,
-                    )
-                    if _diagnostic_email_enabled():
-                        body = _format_page_diagnostic(url, page)
-                        _send_diagnostic_mail(
-                            app,
-                            mail_to,
-                            "BLOQUEO firewall/IPS — revisar IT",
-                            body,
-                        )
-                        diag_sent_before_nie = True
-                    browser.close()
-                    return
-
-                logger.info("🔍 Verificando bloqueos de red... OK")
-                logger.info("🎯 Ejecutando wizard de trámites...")
-                ff = _fill_force()
-                _maybe_run_icpplus_wizard(page, timeout_ms, ff)
-                logger.info("✅ Wizard completado")
-
-                ready_raw = os.getenv("REGISTRO_CITA_PAGE_READY_SELECTOR")
-                ready_sel = (
-                    "#citadoForm"
-                    if ready_raw is None
-                    else ready_raw.strip()
+            perimeter = _detect_perimeter_block(page)
+            if perimeter:
+                logger.error(
+                    "registro_cita: el servidor no llega al portal de citas (bloqueo de red). %s URL=%s",
+                    perimeter,
+                    page.url,
                 )
-                if ready_sel and ready_sel.lower() not in ("none", "false", "-"):
+                if _diagnostic_email_enabled():
+                    body = _format_page_diagnostic(url, page)
+                    _send_diagnostic_mail(
+                        app,
+                        mail_to,
+                        "BLOQUEO firewall/IPS — revisar IT",
+                        body,
+                    )
+                    diag_sent_before_nie = True
+                browser.close()
+                return
+
+            logger.info("🔍 Verificando bloqueos de red... OK")
+            logger.info("🎯 Ejecutando wizard de trámites...")
+            ff = _fill_force()
+            _maybe_run_icpplus_wizard(page, timeout_ms, ff)
+            logger.info("✅ Wizard completado")
+
+            ready_raw = os.getenv("REGISTRO_CITA_PAGE_READY_SELECTOR")
+            ready_sel = (
+                "#citadoForm"
+                if ready_raw is None
+                else ready_raw.strip()
+            )
+            if ready_sel and ready_sel.lower() not in ("none", "false", "-"):
                     try:
                         page.wait_for_selector(
                             ready_sel,
@@ -1143,6 +1141,17 @@ def registro_cita(self) -> bool:
                     browser.close()
         except Exception as e:
             logger.exception("Error en la automatización de registro cita (Playwright).")
+            
+            # Enviar reporte de ejecución con error
+            execution_time = f"{time.time() - start_time:.1f}s"
+            try:
+                _send_execution_report_mail(
+                    app, mail_to, f"ERROR: {type(e).__name__}", screenshots_taken, 
+                    execution_time, url, nie or "No configurado"
+                )
+            except Exception as report_error:
+                logger.warning(f"⚠️ Error enviando reporte de error: {report_error}")
+            
             if _diagnostic_on_error_enabled() and page is not None:
                 try:
                     if diag_sent_before_nie:
@@ -1194,9 +1203,20 @@ def registro_cita(self) -> bool:
 
         if sin_citas:
             logger.info("📋 RESULTADO: Sin citas disponibles")
-            logger.info("� No hay citas - continuando monitoreo...")
+            logger.info("🔄 No hay citas - continuando monitoreo...")
             state["already_notified"] = False
             _save_state(state)
+            
+            # Enviar reporte de ejecución
+            execution_time = f"{time.time() - start_time:.1f}s"
+            try:
+                _send_execution_report_mail(
+                    app, mail_to, "SIN CITAS", screenshots_taken, 
+                    execution_time, url, nie or "No configurado"
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ Error enviando reporte: {e}")
+            
             logger.info("Cita previa: sin citas disponibles (continuando monitoreo).")
             return False
 
@@ -1215,10 +1235,32 @@ def registro_cita(self) -> bool:
                 logger.info("Cita previa: aviso por correo enviado (citas detectadas).")
             else:
                 logger.debug("Cita previa: citas disponibles; aviso ya enviado previamente.")
+            
+            # Enviar reporte de ejecución
+            execution_time = f"{time.time() - start_time:.1f}s"
+            try:
+                _send_execution_report_mail(
+                    app, mail_to, "CITAS DISPONIBLES", screenshots_taken, 
+                    execution_time, url, nie or "No configurado"
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ Error enviando reporte: {e}")
+            
             return True
 
         logger.warning(
             "Cita previa: resultado ambiguo (ni selector de sede ni mensaje sin citas)."
         )
         logger.info("🤷 RESULTADO: Ambiguo - no se pudo determinar si hay citas o no")
+        
+        # Enviar reporte de ejecución
+        execution_time = f"{time.time() - start_time:.1f}s"
+        try:
+            _send_execution_report_mail(
+                app, mail_to, "RESULTADO AMBIGUO", screenshots_taken, 
+                execution_time, url, nie or "No configurado"
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Error enviando reporte: {e}")
+        
         return False
