@@ -305,8 +305,13 @@ class CORSManager:
         from flask_cors import CORS
         
         # Get allowed origins from environment or use defaults
-        allowed_origins = os.environ.get('ALLOWED_ORIGINS', 
-                                       'http://localhost:3000,http://localhost:5173,https://sentineltrading.onrender.com').split(',')
+        allowed_origins_env = os.environ.get('ALLOWED_ORIGINS', 
+                                           'http://localhost:3000,http://localhost:5173,https://sentineltrading.onrender.com')
+        allowed_origins = allowed_origins_env.split(',')
+        
+        # Log CORS configuration
+        logger.info(f"CORS: Initializing with origins: {allowed_origins}")
+        logger.info(f"CORS: Environment ALLOWED_ORIGINS: {allowed_origins_env}")
         
         # Configure CORS with restrictive settings
         CORS(app,
@@ -316,6 +321,8 @@ class CORSManager:
              expose_headers=['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
              supports_credentials=True,
              max_age=3600)  # 1 hour cache for preflight requests
+        
+        logger.info("CORS: Configuration completed")
 
 
 def init_security(app: Flask):

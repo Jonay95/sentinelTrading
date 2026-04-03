@@ -30,6 +30,10 @@ def create_app(config_class=Config):
     from app.api import api_bp
 
     app.register_blueprint(api_bp)
+    
+    # Register dashboard blueprints
+    from app.api.dashboards import register_dashboards
+    register_dashboards(app)
 
     @app.get("/health")
     def health():

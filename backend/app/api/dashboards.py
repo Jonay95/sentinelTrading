@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 # Create Blueprint
 dashboards_bp = Blueprint('dashboards', __name__, url_prefix='/api/dashboards')
 
+# Also create a simple dashboard route for compatibility
+dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
+
 
 class WidgetType(Enum):
     """Dashboard widget types."""
@@ -900,3 +903,50 @@ async def get_widget_data(widget_id: str):
     except Exception as e:
         logger.error(f"Error getting widget data: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# Simple dashboard route for compatibility
+@dashboard_bp.route('/', methods=['GET'])
+def get_default_dashboard():
+    """Get default dashboard data."""
+    try:
+        logger.info("🔍 Default dashboard endpoint accessed")
+        logger.info(f"🌐 Request origin: {request.headers.get('Origin', 'Unknown')}")
+        logger.info(f"📋 Request headers: {dict(request.headers)}")
+        
+        # Create or get default dashboard
+        default_dashboard_id = "default_dashboard"
+        dashboard = dashboard_manager.get_dashboard(default_dashboard_id)
+        
+        if not dashboard:
+            # Create default dashboard
+            default_dashboard_id = dashboard_manager.create_dashboard(
+                name="Default Dashboard",
+                user_id="default_user",
+                description="Default trading dashboard"
+            )
+            dashboard = dashboard_manager.get_dashboard(default_dashboard_id)
+        
+        if dashboard:
+            return jsonify(dashboard.to_dict())
+        else:
+            # Return basic dashboard data
+            return jsonify({
+                "dashboard_id": default_dashboard_id,
+                "name": "Default Dashboard",
+                "description": "Default trading dashboard",
+                "widgets": [],
+                "message": "Default dashboard created"
+            })
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting default dashboard: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# Register both blueprints
+def register_dashboards(app):
+    """Register dashboard blueprints."""
+    app.register_blueprint(dashboards_bp)
+    app.register_blueprint(dashboard_bp)
+    logger.info("📊 Dashboard blueprints registered")
