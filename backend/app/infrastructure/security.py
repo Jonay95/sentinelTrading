@@ -306,7 +306,7 @@ class CORSManager:
         
         # Get allowed origins from environment or use defaults
         allowed_origins = os.environ.get('ALLOWED_ORIGINS', 
-                                       'http://localhost:3000,http://localhost:5173').split(',')
+                                       'http://localhost:3000,http://localhost:5173,https://sentineltrading.onrender.com').split(',')
         
         # Configure CORS with restrictive settings
         CORS(app,

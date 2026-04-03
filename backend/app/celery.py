@@ -4,7 +4,6 @@ Celery configuration for the project.
 
 - Inicializa Celery con Flask context
 - Usa variables de entorno (Redis)
-- Permite ejecutar tareas como registro_cita
 """
 
 from celery import Celery
@@ -23,7 +22,7 @@ def create_celery_app():
         "sentinel",
         broker=broker,
         backend=backend,
-        include=["app.utils.tasks.registro_cita"],
+        include=["app.infrastructure.celery_tasks"],
     )
 
     # Configuración básica con SSL

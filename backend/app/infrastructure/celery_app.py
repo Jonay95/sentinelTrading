@@ -84,29 +84,9 @@ class CeleryConfig:
 
 def _build_full_beat_schedule() -> Dict[str, Any]:
     """
-    Beat schedule base + tarea opcional registro_cita (intervalo desde .env).
-
-    REGISTRO_CITA_BEAT_ENABLED: true/false (defecto true). false desactiva el beat.
-    REGISTRO_CITA_BEAT_INTERVAL_MINUTES: entero 1–1440 (defecto 5).
-    Solo se programa en Beat si REGISTRO_CITA_URL no está vacía (evita ejecuciones vacías).
+    Beat schedule base.
     """
-    schedule = dict(CeleryConfig.BEAT_SCHEDULE)
-    enabled_raw = (os.environ.get("REGISTRO_CITA_BEAT_ENABLED") or "true").strip().lower()
-    if enabled_raw in ("0", "false", "no", "off"):
-        return schedule
-    if not (os.environ.get("REGISTRO_CITA_URL") or "").strip():
-        return schedule
-    try:
-        minutes = int(os.environ.get("REGISTRO_CITA_BEAT_INTERVAL_MINUTES", "5") or "5")
-    except ValueError:
-        minutes = 5
-    minutes = max(1, min(minutes, 1440))
-    schedule["registro-cita-periodic"] = {
-        "task": "app.utils.tasks.registro_cita.registro_cita",
-        "schedule": timedelta(minutes=minutes),
-        "options": {"queue": "celery"},
-    }
-    return schedule
+    return dict(CeleryConfig.BEAT_SCHEDULE)
 
 
 # Create Celery app
@@ -118,28 +98,6 @@ celery_app.autodiscover_tasks(['app.infrastructure'])
 
 _beat_schedule = _build_full_beat_schedule()
 celery_app.conf.beat_schedule = _beat_schedule
-
-# Diagnóstico al cargar la app (visible en logs de `celery beat` y `celery worker`).
-_reg_en = (os.environ.get("REGISTRO_CITA_BEAT_ENABLED") or "true").strip().lower()
-if _reg_en in ("0", "false", "no", "off"):
-    logger.warning(
-        "Celery: registro_cita no está en el beat (REGISTRO_CITA_BEAT_ENABLED desactivado)."
-    )
-elif not (os.environ.get("REGISTRO_CITA_URL") or "").strip():
-    logger.warning(
-        "Celery: registro_cita no está en el beat: falta REGISTRO_CITA_URL en las variables "
-        "de entorno de este proceso. En Render, configúrala también en sentinel-celery-beat "
-        "(no solo en el API o en el worker)."
-    )
-elif "registro-cita-periodic" in _beat_schedule:
-    _reg_sched = _beat_schedule["registro-cita-periodic"]["schedule"]
-    if isinstance(_reg_sched, timedelta):
-        logger.info(
-            "Celery: registro-cita-periodic cada %.0f minutos.",
-            _reg_sched.total_seconds() / 60.0,
-        )
-    else:
-        logger.info("Celery: registro-cita-periodic programada (%s).", _reg_sched)
 
 
 class BaseTask(Task, LoggerMixin):
