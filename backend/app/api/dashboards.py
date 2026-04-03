@@ -88,9 +88,9 @@ class DashboardConfig:
     user_id: str
     layout: Dict[str, Any]  # grid layout configuration
     widgets: List[WidgetConfig]
-    theme: str = "light"
     created_at: datetime
     updated_at: datetime
+    theme: str = "light"
     is_public: bool = False
     
     def to_dict(self) -> Dict[str, Any]:
