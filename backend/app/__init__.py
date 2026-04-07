@@ -25,7 +25,17 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     mail.init_app(app)
-    CORS(app, resources={r"/api/*": {"origins": config_class.CORS_ORIGINS}})
+    
+    # Debug CORS configuration
+    print(f"CORS DEBUG: Config.CORS_ORIGINS = {config_class.CORS_ORIGINS}")
+    
+    # Configure CORS explicitly
+    from flask_cors import CORS
+    CORS(app, 
+         resources={r"/api/*": {"origins": config_class.CORS_ORIGINS}},
+         supports_credentials=True,
+         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+         allow_headers=['Content-Type', 'Authorization', 'X-API-Key'])
 
     from app.api import api_bp
 
