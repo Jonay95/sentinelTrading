@@ -19,10 +19,14 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     _origins = os.environ.get(
-        "CORS_ORIGINS",
-        "http://localhost:5173,https://sentineltrading.onrender.com",
+        "ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:5173,https://sentineltrading.onrender.com",
     )
     CORS_ORIGINS = [o.strip() for o in _origins.split(",") if o.strip()]
+    
+    # Debug CORS configuration
+    print(f"DEBUG: ALLOWED_ORIGINS env = '{_origins}'")
+    print(f"DEBUG: CORS_ORIGINS parsed = {CORS_ORIGINS}")
     FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
     NEWS_API_KEY = os.environ.get("NEWS_API_KEY", "")
     MODEL_VERSION = os.environ.get("MODEL_VERSION", "enhanced-v1")

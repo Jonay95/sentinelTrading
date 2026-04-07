@@ -336,14 +336,12 @@ def init_security(app: Flask):
     # Initialize security middleware
     security_middleware = SecurityMiddleware(app)
     
-    # Initialize CORS
-    cors_manager = CORSManager(app)
+    # Note: CORS is initialized in __init__.py to avoid conflicts
     
     # Store instances in app for access
     app.rate_limiter = rate_limiter
     app.secrets_manager = secrets_manager
     app.security_middleware = security_middleware
-    app.cors_manager = cors_manager
     
     logger.info("Security components initialized")
     
@@ -351,7 +349,6 @@ def init_security(app: Flask):
         'rate_limiter': rate_limiter,
         'secrets_manager': secrets_manager,
         'security_middleware': security_middleware,
-        'cors_manager': cors_manager
     }
 
 
